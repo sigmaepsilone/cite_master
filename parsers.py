@@ -94,6 +94,9 @@ def _detect_format(text: str) -> Optional[str]:
         return "Harvard"
     if re.search(r'\.\s+\d{4};\s*\d+', text):
         return "Vancouver"
+    # IEEE: "Title," Journal, vol. X, no. Y, pp. Z, year  — vol. + pp. birlikte
+    if re.search(r'"[^"]+,"\s+\S', text) and re.search(r'vol\.\s*\d+', text, re.IGNORECASE) and re.search(r'pp\.\s*\d+', text, re.IGNORECASE):
+        return "IEEE"
     if re.search(r'"[^"]+"\s+[A-Z]', text):
         if re.search(r'vol\.', text, re.IGNORECASE):
             return "MLA"
@@ -131,7 +134,7 @@ def parse_citation(text: str) -> CitationData:
     clean = re.sub(r'https?://doi\.org/\S+', '', text)
     clean = re.sub(r'\bdoi:\s*\S+', '', clean, flags=re.IGNORECASE).strip().rstrip(".")
 
-    for parser in [_try_nature, _try_apa, _try_chicago, _try_harvard, _try_vancouver, _try_mla]:
+    for parser in [_try_ieee, _try_nature, _try_apa, _try_chicago, _try_harvard, _try_vancouver, _try_mla]:
         if parser(clean, cd):
             break
     else:
@@ -307,6 +310,57 @@ def _try_vancouver(text: str, cd: CitationData) -> bool:
     cd.issue = m.group(6) or ""
     cd.pages = m.group(7) or ""
     return bool(cd.authors and cd.title)
+
+
+def _try_ieee(text: str, cd: CitationData) -> bool:
+    """
+    IEEE: 'I. Surname, I. Surname, and I. Surname, "Title," Journal, vol. X, no. Y, pp. Z, Mon. year.'
+    Yazarlar I. SURNAME formatında, başlık çift tırnakta ve virgülle biter.
+    """
+    # Başlık: "..., " şeklinde virgülle biten tırnak içi metin
+    m = re.match(
+        r'^(.+?),\s*'                          # yazarlar
+        r'"(.+?),"?\s+'                        # "Başlık," veya "Başlık"
+        r'(.+?),\s*'                           # dergi adı
+        r'vol\.\s*(\d+),\s*'                   # vol. X
+        r'no\.\s*([^\s,]+),\s*'               # no. Y
+        r'pp\.\s*([\d\-–]+),?\s*'             # pp. Z
+        r'(?:\w+\.?\s*)?(\d{4})',             # [Ay] yıl
+        text, re.IGNORECASE
+    )
+    if not m:
+        return False
+
+    author_raw = m.group(1).strip()
+    cd.authors = _split_authors_ieee(author_raw)
+    cd.title = m.group(2).strip().rstrip(",")
+    cd.journal = m.group(3).strip()
+    cd.volume = m.group(4)
+    cd.issue = m.group(5)
+    cd.pages = m.group(6)
+    cd.year = m.group(7)
+    return bool(cd.authors and cd.title)
+
+
+def _split_authors_ieee(raw: str) -> list[str]:
+    """
+    IEEE yazarları: 'I. SURNAME, I. SURNAME, and I. SURNAME'
+    Çıktı: ['SURNAME, I.', ...] — diğer formatlarla tutarlı olsun.
+    """
+    raw = re.sub(r'\s+and\s+', ', ', raw, flags=re.IGNORECASE)
+    tokens = re.split(r',\s*(?=[A-Z]\.)', raw)
+    authors = []
+    for t in tokens:
+        t = t.strip().rstrip(",")
+        # "I. SURNAME" → "SURNAME, I."
+        m = re.match(r'^((?:[A-Z]\.\s*)+)\s*(.+)$', t)
+        if m:
+            initials = m.group(1).strip()
+            surname = m.group(2).strip()
+            authors.append(f"{surname}, {initials}")
+        else:
+            authors.append(t)
+    return authors
 
 
 def _try_mla(text: str, cd: CitationData) -> bool:

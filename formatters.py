@@ -216,7 +216,7 @@ def format_bibtex(cd: CitationData) -> str:
     first_author = ""
     if cd.authors:
         a = cd.authors[0]
-        m = re.match(r'^([A-ZÁÉÍÓÖŐÚÜŰ][a-z\-]+)', a)
+        m = re.match(r'^([A-ZÁÉÍÓÖŐÚÜŰ][A-ZÁÉÍÓÖŐÚÜŰa-záéíóöőúüű\-]+)', a)
         first_author = m.group(1).lower() if m else "unknown"
 
     key = f"{first_author}{cd.year}" if (first_author and cd.year) else "cite_key"
