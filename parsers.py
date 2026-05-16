@@ -115,7 +115,8 @@ def _detect_format(text: str) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 def parse_citation(text: str) -> CitationData:
-    text = text.strip()
+    text = re.sub(r'[\r\n]+', ' ', text).strip()
+    text = re.sub(r' {2,}', ' ', text)
     cd = CitationData(raw=text)
 
     if len(text) < 20:
