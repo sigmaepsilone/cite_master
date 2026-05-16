@@ -216,8 +216,14 @@ def format_bibtex(cd: CitationData) -> str:
     first_author = ""
     if cd.authors:
         a = cd.authors[0]
+        # "Surname, I." form
         m = re.match(r'^([A-ZÁÉÍÓÖŐÚÜŰ][A-ZÁÉÍÓÖŐÚÜŰa-záéíóöőúüű\-]+)', a)
-        first_author = m.group(1).lower() if m else "unknown"
+        if m:
+            first_author = m.group(1).lower()
+        else:
+            # "I. Surname" or "I.I. Surname" form — grab last word
+            m2 = re.search(r'([A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű\-]{2,})\s*$', a)
+            first_author = m2.group(1).lower() if m2 else "unknown"
 
     key = f"{first_author}{cd.year}" if (first_author and cd.year) else "cite_key"
     real = [a for a in cd.authors if not _is_et_al(a)]

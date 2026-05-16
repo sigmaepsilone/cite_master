@@ -101,6 +101,9 @@ def _detect_format(text: str) -> Optional[str]:
         if re.search(r'vol\.', text, re.IGNORECASE):
             return "MLA"
         return "Chicago"
+    # ACS: vol (issue) article_no, DOI (year) — yıl en sonda parantezde, issue parantezli
+    if re.search(r'\d+\s+\(\d+\)\s+\w+,', text) and re.search(r'\(\d{4}\)\s*\.?\s*$', text.strip()):
+        return "ACS"
     # Taylor & Francis: Authors (year) Title, Journal, vol:issue, pages
     if re.search(r'\(\d{4}\)\s+\w', text) and re.search(r',\s*\d+:\d+,', text):
         return "Taylor & Francis"
@@ -138,7 +141,7 @@ def parse_citation(text: str) -> CitationData:
     clean = re.sub(r'https?://doi\.org/\S+', '', text)
     clean = re.sub(r'\bdoi:\s*\S+', '', clean, flags=re.IGNORECASE).strip().rstrip(".")
 
-    for parser in [_try_ieee, _try_taylor, _try_nature, _try_apa, _try_chicago, _try_harvard, _try_vancouver, _try_mla]:
+    for parser in [_try_ieee, _try_acs, _try_taylor, _try_nature, _try_apa, _try_chicago, _try_harvard, _try_vancouver, _try_mla]:
         if parser(clean, cd):
             break
     else:
@@ -432,6 +435,69 @@ def _split_authors_ieee(raw: str) -> list[str]:
         else:
             authors.append(t)
     return authors
+
+
+def _try_acs(text: str, cd: CitationData) -> bool:
+    """
+    ACS: 'Authors, Title, Journal vol (issue) article_no, (year).'
+    Örnek: S. Poincloux, & K.A. Takeuchi, Rigidity transition..., Proc. Natl. Acad. Sci. U.S.A. 121 (49) e2408706121, (2024).
+    Strateji: önce yıl ve vol/issue/article_no kısmını sağdan bul, geri kalan body'de
+    yazarlar ve başlığı küçük harf sınırından böl, journal = body'nin son kısmı.
+    """
+    # Yıl en sonda: (2024) veya (2024).
+    year_m = re.search(r'\((\d{4})\)\s*\.?\s*$', text.strip())
+    if not year_m:
+        return False
+    year = year_m.group(1)
+    before_year = text[:year_m.start()].strip().rstrip(",").strip()
+
+    # "Journal vol (issue) article_no" — vol (issue) article_no sondan bul
+    vi_m = re.search(r',?\s*(\d+)\s+\((\d+)\)\s+(\S+)\s*$', before_year)
+    if not vi_m:
+        return False
+    volume = vi_m.group(1)
+    issue = vi_m.group(2)
+    article_no = vi_m.group(3).rstrip(",")
+    body = before_year[:vi_m.start()].strip().rstrip(",").strip()
+    # body: "Authors, Title, Journal"
+
+    # Yazarlar küçük harf kelime içermeyen, birden fazla virgülle ayrılan başlangıç kısmı.
+    # Başlık: küçük harf içeren ilk uzun virgül parçası.
+    # Journal: başlık sonrası kalan.
+    # Yöntem: virgül split, başlık için küçük harf kriterini kullan.
+    segments = [s.strip() for s in re.split(r',\s*(?=\S)', body) if s.strip()]
+    if len(segments) < 3:
+        return False
+
+    title_idx = None
+    for i, seg in enumerate(segments):
+        if re.search(r'\b[a-z]{3,}\b', seg):
+            title_idx = i
+            break
+
+    if title_idx is None or title_idx == 0:
+        return False
+
+    author_block = ", ".join(segments[:title_idx])
+    title = segments[title_idx]
+    journal = ", ".join(segments[title_idx + 1:])
+    if not journal:
+        return False
+
+    # Yazar ayrıştırma: & ve virgülle
+    author_raw = re.sub(r'\s*&\s*', ', ', author_block)
+    authors = [a.strip().rstrip(",") for a in re.split(r',\s*(?=[A-Z])', author_raw) if a.strip()]
+    if not authors:
+        return False
+
+    cd.authors = authors
+    cd.title = title
+    cd.journal = journal
+    cd.volume = volume
+    cd.issue = issue
+    cd.pages = article_no  # ACS uses article number, not page range
+    cd.year = year
+    return bool(cd.authors and cd.title)
 
 
 def _try_mla(text: str, cd: CitationData) -> bool:
