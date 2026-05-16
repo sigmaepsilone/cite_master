@@ -101,6 +101,9 @@ def _detect_format(text: str) -> Optional[str]:
         if re.search(r'vol\.', text, re.IGNORECASE):
             return "MLA"
         return "Chicago"
+    # Taylor & Francis: Authors (year) Title, Journal, vol:issue, pages
+    if re.search(r'\(\d{4}\)\s+\w', text) and re.search(r',\s*\d+:\d+,', text):
+        return "Taylor & Francis"
     # Nature/Springer: digits, comma, token, space, (year)  — e.g. "25, 123 (2025)"
     if re.search(r'\d+,\s*\S+\s+\(\d{4}\)', text):
         return "Nature/Springer"
@@ -135,7 +138,7 @@ def parse_citation(text: str) -> CitationData:
     clean = re.sub(r'https?://doi\.org/\S+', '', text)
     clean = re.sub(r'\bdoi:\s*\S+', '', clean, flags=re.IGNORECASE).strip().rstrip(".")
 
-    for parser in [_try_ieee, _try_nature, _try_apa, _try_chicago, _try_harvard, _try_vancouver, _try_mla]:
+    for parser in [_try_ieee, _try_taylor, _try_nature, _try_apa, _try_chicago, _try_harvard, _try_vancouver, _try_mla]:
         if parser(clean, cd):
             break
     else:
@@ -310,6 +313,35 @@ def _try_vancouver(text: str, cd: CitationData) -> bool:
     cd.volume = m.group(5)
     cd.issue = m.group(6) or ""
     cd.pages = m.group(7) or ""
+    return bool(cd.authors and cd.title)
+
+
+def _try_taylor(text: str, cd: CitationData) -> bool:
+    """
+    Taylor & Francis: 'Authors (year) Title, Journal, vol:issue, pages, DOI: ...'
+    Örnek: Han Li, Jin Sun & J. Michael Herrmann (2024) Beyond jamming..., Advanced Robotics, 38:11, 715-729
+    """
+    m = re.match(
+        r'^(.+?)\s*\((\d{4})\)\s+'       # yazarlar (yıl)
+        r'(.+?),\s*'                       # başlık,
+        r'([^,]+),\s*'                     # dergi,
+        r'(\d+):(\d+),\s*'                # cilt:sayı,
+        r'([\d\-–—]+)',                    # sayfalar
+        text
+    )
+    if not m:
+        return False
+
+    author_raw = m.group(1).strip()
+    # & ile ayrılmış yazarları böl
+    author_raw = re.sub(r'\s*&\s*', ', ', author_raw)
+    cd.authors = [a.strip() for a in re.split(r',\s*(?=[A-Z])', author_raw) if a.strip()]
+    cd.year = m.group(2)
+    cd.title = m.group(3).strip()
+    cd.journal = m.group(4).strip()
+    cd.volume = m.group(5)
+    cd.issue = m.group(6)
+    cd.pages = m.group(7)
     return bool(cd.authors and cd.title)
 
 
