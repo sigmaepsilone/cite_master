@@ -282,9 +282,41 @@ def _vancouver_authors(authors: list[str]) -> str:
     return ", ".join(normed) + "."
 
 
+# ── Springer/Nature ───────────────────────────────────────────────────────────
+def format_springer(cd: CitationData) -> str:
+    """
+    Springer/Nature style:
+    Surname, I., Surname, I. et al. Title. Journal vol, issue (year).
+    https://doi.org/...
+    """
+    authors = _springer_authors(cd.authors)
+    title = _sentence_case(cd.title) if cd.title else "[başlık?]"
+    journal = cd.journal or "[dergi?]"
+    vol = cd.volume or "[cilt?]"
+    issue = f", {cd.issue}" if cd.issue else ""
+    year = f"({cd.year})" if cd.year else "([yıl?])"
+    doi_part = f" {cd.url}" if cd.url else (f" https://doi.org/{cd.doi}" if cd.doi else "")
+    out = f"{authors} {title}. {journal} {vol}{issue} {year}.{doi_part}"
+    out += _missing_note(cd.missing_fields)
+    return out.strip()
+
+
+def _springer_authors(authors: list[str]) -> str:
+    if not authors:
+        return "[yazar?]"
+    real = [a.strip() for a in authors if not _is_et_al(a)]
+    has_et_al = len(real) < len(authors)
+    normed = [_ensure_dot(a) for a in real]
+    joined = ", ".join(normed)
+    if has_et_al:
+        return joined + " et al."
+    return joined
+
+
 ALL_FORMATS = {
     "APA": format_apa,
     "IEEE": format_ieee,
+    "Springer/Nature": format_springer,
     "Chicago": format_chicago,
     "Harvard": format_harvard,
     "MLA": format_mla,

@@ -72,10 +72,12 @@ Tanınan giriş formatları:
 
 FORMAT_LABELS = {
     "APA": "APA",
+    "IEEE": "IEEE",
+    "Springer/Nature": "Springer/Nature",
+    "Nature/Springer": "Nature/Springer",
     "Chicago": "Chicago",
     "Harvard": "Harvard",
     "MLA": "MLA",
-    "IEEE": "IEEE",
     "BibTeX": "BibTeX",
     "Vancouver": "Vancouver",
     None: "belirsiz",
