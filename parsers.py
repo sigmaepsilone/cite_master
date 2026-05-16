@@ -1,0 +1,404 @@
+"""Citation parsing: extract metadata from pasted citation text."""
+
+import re
+from dataclasses import dataclass, field
+from typing import Optional
+
+
+@dataclass
+class CitationData:
+    authors: list[str] = field(default_factory=list)
+    title: str = ""
+    journal: str = ""
+    volume: str = ""
+    issue: str = ""
+    pages: str = ""
+    year: str = ""
+    doi: str = ""
+    url: str = ""
+    raw: str = ""
+    missing_fields: list[str] = field(default_factory=list)
+    is_valid: bool = True
+    detected_format: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Author parsing helpers
+# ---------------------------------------------------------------------------
+
+def _split_authors_nature(raw: str) -> list[str]:
+    """Parse 'Surname, I., Surname, I. et al.' -> ['Surname, I.', ..., 'et al.']"""
+    raw = raw.strip().rstrip(".")
+    et_al = bool(re.search(r'\bet\s+al\.?', raw, re.IGNORECASE))
+    raw = re.sub(r'\s*\bet\s+al\.?', '', raw, flags=re.IGNORECASE).strip().rstrip(",").strip()
+
+    tokens = re.findall(
+        r'[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüűÀ-ž\-]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüűÀ-ž\-]+)*'
+        r',\s*[A-ZÁÉÍÓÖŐÚÜŰ]\.(?:[A-ZÁÉÍÓÖŐÚÜŰ]\.)*',
+        raw
+    )
+    if not tokens:
+        tokens = [p.strip() for p in re.split(r',\s*(?=[A-ZÁÉÍÓÖŐÚÜŰ])', raw) if p.strip()]
+
+    if et_al:
+        tokens.append("et al.")
+    return tokens
+
+
+def _split_authors_apa(raw: str) -> list[str]:
+    """Parse APA 'Surname, I. I., Surname, I. I., & Surname, I. I.' -> list"""
+    raw = raw.strip().rstrip(".")
+    et_al = bool(re.search(r'\bet\s+al\.?', raw, re.IGNORECASE))
+    raw = re.sub(r'\s*\bet\s+al\.?', '', raw, flags=re.IGNORECASE).strip().rstrip(",").strip()
+    raw = re.sub(r'\s*&\s*', ', ', raw)
+
+    tokens = re.findall(
+        r'[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű\-]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű\-]+)*'
+        r',\s*(?:[A-ZÁÉÍÓÖŐÚÜŰ]\.\s*)+',
+        raw
+    )
+    if not tokens:
+        tokens = [p.strip() for p in re.split(r',\s*(?=[A-ZÁÉÍÓÖŐÚÜŰ][a-z])', raw) if p.strip()]
+
+    tokens = [t.strip().rstrip(",").rstrip(".") + "." for t in tokens]
+
+    if et_al:
+        tokens.append("et al.")
+    return tokens
+
+
+# ---------------------------------------------------------------------------
+# DOI / URL extraction
+# ---------------------------------------------------------------------------
+
+def _extract_doi(text: str) -> tuple[str, str]:
+    m = re.search(r'https?://doi\.org/(10\.[^\s]+)', text, re.IGNORECASE)
+    if m:
+        doi = m.group(1).rstrip(".),")
+        return doi, f"https://doi.org/{doi}"
+    m = re.search(r'\bdoi:\s*(10\.[^\s,]+)', text, re.IGNORECASE)
+    if m:
+        doi = m.group(1).rstrip(".),")
+        return doi, f"https://doi.org/{doi}"
+    return "", ""
+
+
+# ---------------------------------------------------------------------------
+# Format detection heuristic
+# ---------------------------------------------------------------------------
+
+def _detect_format(text: str) -> Optional[str]:
+    if re.search(r'@\w+\{', text):
+        return "BibTeX"
+    if re.search(r'Available at:', text, re.IGNORECASE):
+        return "Harvard"
+    if re.search(r'\.\s+\d{4};\s*\d+', text):
+        return "Vancouver"
+    if re.search(r'"[^"]+"\s+[A-Z]', text):
+        if re.search(r'vol\.', text, re.IGNORECASE):
+            return "MLA"
+        return "Chicago"
+    # Nature/Springer: digits, comma, token, space, (year)  — e.g. "25, 123 (2025)"
+    if re.search(r'\d+,\s*\S+\s+\(\d{4}\)', text):
+        return "Nature/Springer"
+    # APA: authors list then "(year)." at start of sentence
+    if re.search(r'\.\s*\(\d{4}\)', text):
+        return "APA"
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Main parse entry point
+# ---------------------------------------------------------------------------
+
+def parse_citation(text: str) -> CitationData:
+    text = text.strip()
+    cd = CitationData(raw=text)
+
+    if len(text) < 20:
+        cd.is_valid = False
+        return cd
+
+    if re.match(r'@\w+\{', text):
+        cd.detected_format = "BibTeX"
+        _parse_bibtex(text, cd)
+        _validate(cd)
+        return cd
+
+    cd.detected_format = _detect_format(text)
+    cd.doi, cd.url = _extract_doi(text)
+
+    clean = re.sub(r'https?://doi\.org/\S+', '', text)
+    clean = re.sub(r'\bdoi:\s*\S+', '', clean, flags=re.IGNORECASE).strip().rstrip(".")
+
+    for parser in [_try_nature, _try_apa, _try_chicago, _try_harvard, _try_vancouver, _try_mla]:
+        if parser(clean, cd):
+            break
+    else:
+        _generic_parse(clean, cd)
+
+    if not cd.year:
+        m = re.search(r'\b(19|20)\d{2}\b', text)
+        if m:
+            cd.year = m.group(0)
+
+    _validate(cd)
+    return cd
+
+
+# ---------------------------------------------------------------------------
+# Style-specific parsers (return True on success)
+# ---------------------------------------------------------------------------
+
+def _try_nature(text: str, cd: CitationData) -> bool:
+    """
+    Nature/Springer: 'Authors. Title. Journal vol, issue (year).'
+    Key insight: journal may be abbreviated with dots ('Arch. Civ. Mech. Eng.'),
+    so we cannot naively split on '. '. Instead we use the (year) anchor and
+    work backwards, then find sentence boundaries by looking for '. ' followed
+    by a word with 2+ lowercase chars (not an initial like 'P.').
+    """
+    year_m = re.search(r'\((\d{4})\)', text)
+    if not year_m:
+        return False
+    year = year_m.group(1)
+    before_year = text[:year_m.start()].strip().rstrip(",").strip()
+
+    # Strip 'vol, issue' from end
+    vi_m = re.search(r'\s+(\d+),\s*(\S+)\s*$', before_year)
+    if vi_m:
+        volume, issue = vi_m.group(1), vi_m.group(2).rstrip(".,")
+        body = before_year[:vi_m.start()].strip()
+    else:
+        vi_m2 = re.search(r'\s+(\d+)\s*$', before_year)
+        if not vi_m2:
+            return False
+        volume, issue = vi_m2.group(1), ""
+        body = before_year[:vi_m2.start()].strip()
+
+    # Find sentence split points: '. ' followed by an uppercase word that has
+    # >=3 lowercase letters following (excludes abbreviations like 'Eng. ', 'Civ. ')
+    split_points = []
+    for m in re.finditer(r'\.\s+(?=[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]{2,})', body):
+        split_points.append(m.start())
+
+    if len(split_points) < 2:
+        return False
+
+    # Among all split point pairs, pick the pair where the middle segment (title)
+    # is the longest — that's the real title, not a journal abbreviation fragment.
+    best = None
+    best_len = 0
+    for i in range(len(split_points) - 1):
+        seg_len = split_points[i + 1] - split_points[i]
+        if seg_len > best_len:
+            best_len = seg_len
+            best = i
+
+    if best is None:
+        return False
+
+    second_last = split_points[best]
+    last = split_points[best + 1]
+
+    journal = body[last + 1:].strip()
+    title = body[second_last + 1:last].strip()
+    author_block = body[:second_last].strip()
+
+    if not journal or not title or len(title) < 10:
+        return False
+
+    authors = _split_authors_nature(author_block)
+    if not authors:
+        return False
+
+    cd.authors = authors
+    cd.title = title
+    cd.journal = journal
+    cd.volume = volume
+    cd.issue = issue
+    cd.year = year
+    return True
+
+
+def _try_apa(text: str, cd: CitationData) -> bool:
+    """APA: 'Authors (year). Title. Journal, vol(issue), pages.'"""
+    m = re.match(
+        r'^(.+?)\.\s*\((\d{4})\)[,.]?\s+'
+        r'(.+?)\.\s+'
+        r'([A-Z][^,]+),\s*'
+        r'(\d+)'
+        r'(?:\(([^\)]+)\))?'
+        r'(?:,\s*([^\.\s][^\.]*))?',
+        text
+    )
+    if not m:
+        return False
+    cd.authors = _split_authors_apa(m.group(1))
+    cd.year = m.group(2)
+    cd.title = m.group(3).strip()
+    cd.journal = m.group(4).strip()
+    cd.volume = m.group(5)
+    cd.issue = m.group(6) or ""
+    cd.pages = (m.group(7) or "").strip()
+    return bool(cd.authors and cd.title)
+
+
+def _try_chicago(text: str, cd: CitationData) -> bool:
+    """Chicago: 'Authors. "Title." Journal vol, no. issue (year): pages.'"""
+    m = re.match(
+        r'^(.+?)\.\s+"(.+?)"\s+'
+        r'([A-Z][^,]+),\s*(\d+),?\s*no\.\s*([^\s(]+)\s*\((\d{4})\)'
+        r'(?::\s*([^\.\s][^\.]*))?',
+        text, re.IGNORECASE
+    )
+    if not m:
+        return False
+    cd.authors = _split_authors_nature(m.group(1))
+    cd.title = m.group(2).strip()
+    cd.journal = m.group(3).strip()
+    cd.volume = m.group(4)
+    cd.issue = m.group(5)
+    cd.year = m.group(6)
+    cd.pages = (m.group(7) or "").strip()
+    return bool(cd.authors and cd.title)
+
+
+def _try_harvard(text: str, cd: CitationData) -> bool:
+    """Harvard: 'Authors, year. Title. Journal, vol(issue). Available at: url'"""
+    m = re.match(
+        r'^(.+?),\s*(\d{4})\.\s+'
+        r'(.+?)\.\s+'
+        r'([A-Z][^,]+),\s*(\d+)'
+        r'(?:\(([^\)]+)\))?'
+        r'(?:,?\s*(?:pp\.\s*)?([^\.\s][^\.]*))?',
+        text
+    )
+    if not m:
+        return False
+    cd.authors = _split_authors_nature(m.group(1))
+    cd.year = m.group(2)
+    cd.title = m.group(3).strip()
+    cd.journal = m.group(4).strip()
+    cd.volume = m.group(5)
+    cd.issue = m.group(6) or ""
+    cd.pages = (m.group(7) or "").strip()
+    return bool(cd.authors and cd.title)
+
+
+def _try_vancouver(text: str, cd: CitationData) -> bool:
+    """Vancouver: 'Authors. Title. Journal. year;vol(issue):pages.'"""
+    m = re.match(
+        r'^(.+?)\.\s+'
+        r'(.+?)\.\s+'
+        r'([A-Z][^.]+)\.\s+'
+        r'(\d{4});\s*(\d+)'
+        r'(?:\(([^\)]+)\))?'
+        r'(?::([^\s\.]+))?',
+        text
+    )
+    if not m:
+        return False
+    cd.authors = _split_authors_nature(m.group(1))
+    cd.title = m.group(2).strip()
+    cd.journal = m.group(3).strip()
+    cd.year = m.group(4)
+    cd.volume = m.group(5)
+    cd.issue = m.group(6) or ""
+    cd.pages = m.group(7) or ""
+    return bool(cd.authors and cd.title)
+
+
+def _try_mla(text: str, cd: CitationData) -> bool:
+    """MLA: 'Authors. "Title." Journal, vol. X, no. Y, year, pp. pages.'"""
+    m = re.match(
+        r'^(.+?)\.\s+"(.+?)"\s+'
+        r'([A-Z][^,]+),\s*vol\.\s*(\d+),\s*no\.\s*([^\s,]+),\s*(\d{4})'
+        r'(?:,\s*pp\.\s*([^\.\s][^\.]*))?',
+        text, re.IGNORECASE
+    )
+    if not m:
+        return False
+    cd.authors = _split_authors_nature(m.group(1))
+    cd.title = m.group(2).strip()
+    cd.journal = m.group(3).strip()
+    cd.volume = m.group(4)
+    cd.issue = m.group(5)
+    cd.year = m.group(6)
+    cd.pages = (m.group(7) or "").strip()
+    return bool(cd.authors and cd.title)
+
+
+# ---------------------------------------------------------------------------
+# BibTeX parser
+# ---------------------------------------------------------------------------
+
+def _parse_bibtex(text: str, cd: CitationData):
+    def get_field(name):
+        m = re.search(
+            rf'{name}\s*=\s*[{{"](.+?)[}}"][\s,}}]',
+            text, re.IGNORECASE | re.DOTALL
+        )
+        return m.group(1).strip() if m else ""
+
+    author_raw = get_field("author")
+    if author_raw:
+        cd.authors = [a.strip() for a in re.split(r'\s+and\s+', author_raw, flags=re.IGNORECASE)]
+    cd.title = get_field("title")
+    cd.journal = get_field("journal") or get_field("booktitle")
+    cd.volume = get_field("volume")
+    cd.issue = get_field("number")
+    cd.pages = get_field("pages")
+    cd.year = get_field("year")
+    cd.doi = get_field("doi")
+    if cd.doi and not cd.url:
+        cd.url = f"https://doi.org/{cd.doi}"
+
+
+# ---------------------------------------------------------------------------
+# Generic fallback
+# ---------------------------------------------------------------------------
+
+def _generic_parse(text: str, cd: CitationData):
+    year_m = re.search(r'\b(19|20)\d{2}\b', text)
+    if year_m:
+        cd.year = year_m.group(0)
+
+    title_m = re.search(r'"([^"]{10,})"', text)
+    if title_m:
+        cd.title = title_m.group(1).strip()
+
+    sentences = re.split(r'(?<=[a-z])\.\s+(?=[A-Z])', text)
+    if sentences:
+        authors = _split_authors_nature(sentences[0].rstrip("."))
+        if authors and len(authors[0]) < 60:
+            cd.authors = authors
+        if not cd.title and len(sentences) > 1:
+            cd.title = sentences[1].strip().rstrip(".")
+
+    j_m = re.search(r'(?<!\w)([A-Z][a-z]+\.(?:\s+[A-Z][a-z]*\.?){1,3})', text)
+    if j_m:
+        cd.journal = j_m.group(1).strip()
+
+    vol_m = re.search(r'vol(?:ume)?\.?\s*(\d+)', text, re.IGNORECASE)
+    if vol_m:
+        cd.volume = vol_m.group(1)
+
+
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
+
+def _validate(cd: CitationData):
+    cd.missing_fields = []
+    if not cd.authors:
+        cd.missing_fields.append("authors")
+    if not cd.title:
+        cd.missing_fields.append("title")
+    if not cd.journal:
+        cd.missing_fields.append("journal")
+    if not cd.year:
+        cd.missing_fields.append("year")
+    if not cd.volume:
+        cd.missing_fields.append("volume")
+    cd.is_valid = bool((cd.title and cd.year) or cd.doi)
