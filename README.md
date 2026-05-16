@@ -41,7 +41,7 @@ Windows 10/11 (64-bit) — kurulum gerekmez, ZIP'i açıp exe'yi çalıştırın
 ```
 S. E. KARA, O. YİĞİD, M. ŞEN, and M. HÜSEYİNOĞLU, "Model Predictive Trajectory Tracking
 Control of 2 DoFs SCARA Robot under External Force Acting to the Tip along the Trajectory,"
-Dicle University Journal of Engineering (DUJE), vol. 14, no. 2, pp. 325–332, Jun. 2023.
+Dicle University Journal of Engineering (DUJE), vol. 14, no. 2, pp. 325-332, Jun. 2023.
 ```
 
 **Çıktı** (otomatik dönüştürülen formatlar):
@@ -50,16 +50,16 @@ Dicle University Journal of Engineering (DUJE), vol. 14, no. 2, pp. 325–332, J
 APA
 Kara, S. E., Yiğid, O., Şen, M., & Hüseyinoğlu, M. (2023). Model predictive trajectory
 tracking control of 2 DoFs SCARA robot under external force acting to the tip along the
-trajectory. Dicle University Journal of Engineering (DUJE), 14(2), 325–332.
+trajectory. Dicle University Journal of Engineering (DUJE), 14(2), 325-332.
 
 Chicago
 Kara, S. E., O. Yiğid, M. Şen, M. Hüseyinoğlu. "Model Predictive Trajectory Tracking
 Control of 2 DoFs SCARA Robot..." Dicle University Journal of Engineering (DUJE) 14,
-no. 2 (2023): 325–332.
+no. 2 (2023): 325-332.
 
 Harvard
 Kara, S. E. et al., 2023. Model predictive trajectory tracking control...
-Dicle University Journal of Engineering (DUJE), 14(2), pp. 325–332.
+Dicle University Journal of Engineering (DUJE), 14(2), pp. 325-332.
 
 BibTeX
 @article{kara2023,
