@@ -67,7 +67,20 @@ Desteklenen çıktı formatları:
 Tanınan giriş formatları:
 • Nature/Springer stili
 • APA, Chicago, Harvard, Vancouver, MLA
+• IEEE, Taylor & Francis
 • BibTeX
+"""
+
+ABOUT_TEXT = """Citation Converter — Atıf Dönüştürücü
+
+Sürüm: v1.3-beta
+
+Geliştirici: Sertaç Emre Kara
+
+Atıfları 8 farklı akademik formata
+otomatik dönüştüren masaüstü uygulaması.
+
+Lisans: MIT
 """
 
 FORMAT_LABELS = {
@@ -80,6 +93,7 @@ FORMAT_LABELS = {
     "MLA": "MLA",
     "BibTeX": "BibTeX",
     "Vancouver": "Vancouver",
+    "Taylor & Francis": "Taylor & Francis",
     None: "belirsiz",
 }
 
@@ -161,8 +175,10 @@ class MainWindow(QMainWindow):
         toolbar.addStretch()
         self.clear_btn = QPushButton("Temizle")
         self.help_btn = QPushButton("Yardım")
+        self.about_btn = QPushButton("Hakkında")
         toolbar.addWidget(self.clear_btn)
         toolbar.addWidget(self.help_btn)
+        toolbar.addWidget(self.about_btn)
         root.addLayout(toolbar)
 
         in_label = QLabel("GİRİŞ — Atıfı yapıştırın (Ctrl+V):")
@@ -210,6 +226,7 @@ class MainWindow(QMainWindow):
         self.input_edit.textChanged.connect(self._on_input_changed)
         self.clear_btn.clicked.connect(self._clear)
         self.help_btn.clicked.connect(self._show_help)
+        self.about_btn.clicked.connect(self._show_about)
 
     def _on_input_changed(self):
         text = self.input_edit.toPlainText().strip()
@@ -277,6 +294,13 @@ class MainWindow(QMainWindow):
         msg = QMessageBox(self)
         msg.setWindowTitle("Yardım")
         msg.setText(HELP_TEXT)
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.exec()
+
+    def _show_about(self):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Hakkında")
+        msg.setText(ABOUT_TEXT)
         msg.setIcon(QMessageBox.Icon.Information)
         msg.exec()
 

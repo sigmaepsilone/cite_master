@@ -253,22 +253,60 @@ def _try_apa(text: str, cd: CitationData) -> bool:
 
 def _try_chicago(text: str, cd: CitationData) -> bool:
     """Chicago: 'Authors. "Title." Journal vol, no. issue (year): pages.'"""
-    m = re.match(
-        r'^(.+?)\.\s+"(.+?)"\s+'
-        r'([A-Z][^,]+),\s*(\d+),?\s*no\.\s*([^\s(]+)\s*\((\d{4})\)'
-        r'(?::\s*([^\.\s][^\.]*))?',
-        text, re.IGNORECASE
-    )
-    if not m:
+    # Önce tırnaklı başlığı bul
+    title_m = re.search(r'"([^"]+)"', text)
+    if not title_m:
         return False
-    cd.authors = _split_authors_nature(m.group(1))
-    cd.title = m.group(2).strip()
-    cd.journal = m.group(3).strip()
-    cd.volume = m.group(4)
-    cd.issue = m.group(5)
-    cd.year = m.group(6)
-    cd.pages = (m.group(7) or "").strip()
-    return bool(cd.authors and cd.title)
+
+    before_title = text[:title_m.start()].strip()
+    after_title = text[title_m.end():].strip().lstrip(".,").strip()
+
+    # Yazar bloğu: tırnak öncesi, son nokta + boşluğa kadar
+    author_block = re.sub(r'\.\s*$', '', before_title).strip()
+    if not author_block:
+        return False
+
+    # Dergi adı: sayıdan önce gelen kısım
+    # "Journal of Medicine 10, no. 2 (2024): 100" → journal="Journal of Medicine", vol=10
+    jv_m = re.match(r'(.+?)\s+(\d+)', after_title)
+    if not jv_m:
+        return False
+
+    journal = jv_m.group(1).strip()
+    rest = after_title[jv_m.start(2):]  # "10, no. 2 (2024): 100-110."
+
+    # no. ile
+    m = re.match(
+        r'(\d+),?\s*no\.\s*([^\s(]+)\s*\((\d{4})\)'
+        r'(?::\s*([\d\-–—]+))?',
+        rest, re.IGNORECASE
+    )
+    if m:
+        cd.authors = _split_authors_nature(author_block)
+        cd.title = title_m.group(1).strip().rstrip(".")
+        cd.journal = journal
+        cd.volume = m.group(1)
+        cd.issue = m.group(2)
+        cd.year = m.group(3)
+        cd.pages = (m.group(4) or "").strip()
+        return bool(cd.authors and cd.title)
+
+    # no. olmadan
+    m2 = re.match(
+        r'(\d+)\s*\((\d{4})\)'
+        r'(?::\s*([\d\-–—]+))?',
+        rest, re.IGNORECASE
+    )
+    if m2:
+        cd.authors = _split_authors_nature(author_block)
+        cd.title = title_m.group(1).strip().rstrip(".")
+        cd.journal = journal
+        cd.volume = m2.group(1)
+        cd.year = m2.group(2)
+        cd.pages = (m2.group(3) or "").strip()
+        return bool(cd.authors and cd.title)
+
+    return False
 
 
 def _try_harvard(text: str, cd: CitationData) -> bool:
@@ -326,7 +364,7 @@ def _try_taylor(text: str, cd: CitationData) -> bool:
         r'(.+?),\s*'                       # başlık,
         r'([^,]+),\s*'                     # dergi,
         r'(\d+):(\d+),\s*'                # cilt:sayı,
-        r'([\d\-–—]+)',                    # sayfalar
+        r'([\d–—\-]+)',                    # sayfalar (tire, en-dash, em-dash)
         text
     )
     if not m:
@@ -357,7 +395,7 @@ def _try_ieee(text: str, cd: CitationData) -> bool:
         r'(.+?),\s*'                           # dergi adı
         r'vol\.\s*(\d+),\s*'                   # vol. X
         r'no\.\s*([^\s,]+),\s*'               # no. Y
-        r'pp\.\s*([\d\-–]+),?\s*'             # pp. Z
+        r'pp\.\s*([\d–—\-]+),?\s*'  # pp. Z (tire, en-dash, em-dash)
         r'(?:\w+\.?\s*)?(\d{4})',             # [Ay] yıl
         text, re.IGNORECASE
     )

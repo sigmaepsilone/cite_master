@@ -20,7 +20,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='CitationConverter_v1.2-beta',
+    name='CitationConverter_v1.3-beta',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -41,5 +41,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='CitationConverter_v1.2-beta',
+    name='CitationConverter_v1.3-beta',
 )
