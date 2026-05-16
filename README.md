@@ -73,10 +73,10 @@ BibTeX
 }
 ```
 
-## Çalıştırma (kaynak koddan)
+## Kaynak Koddan Çalıştırma
 
 ```bash
-conda activate uygulamalar
+pip install PyQt6
 python main.py
 ```
 
@@ -85,7 +85,7 @@ python main.py
 ## Tekrar Build Alma
 
 ```bash
-conda activate uygulamalar
+pip install pyinstaller
 pyinstaller citation_converter.spec
 ```
 
