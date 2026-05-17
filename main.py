@@ -155,8 +155,9 @@ class MainWindow(QMainWindow):
 
     def _position_window(self):
         screen = QApplication.primaryScreen().availableGeometry()
-        self.resize(screen.width(), screen.height())
-        self.move(screen.left(), screen.top())
+        width = screen.width() // 3
+        self.resize(width, screen.height())
+        self.move(screen.left() + (screen.width() - width) // 2, screen.top())
 
     def _build_ui(self):
         central = QWidget()
