@@ -67,13 +67,13 @@ Desteklenen çıktı formatları:
 Tanınan giriş formatları:
 • Nature/Springer stili
 • APA, Chicago, Harvard, Vancouver, MLA
-• IEEE, Taylor & Francis, ACS
+• IEEE, Taylor & Francis, ACS, Frontiers
 • BibTeX
 """
 
 ABOUT_TEXT = """Citation Converter — Atıf Dönüştürücü
 
-Sürüm: v1.4-beta
+Sürüm: v1.5-beta
 
 Geliştirici: Sertaç Emre Kara
 
@@ -95,6 +95,7 @@ FORMAT_LABELS = {
     "Vancouver": "Vancouver",
     "Taylor & Francis": "Taylor & Francis",
     "ACS": "ACS",
+    "Frontiers": "Frontiers",
     None: "belirsiz",
 }
 

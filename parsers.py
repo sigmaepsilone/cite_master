@@ -27,18 +27,23 @@ class CitationData:
 # ---------------------------------------------------------------------------
 
 def _split_authors_nature(raw: str) -> list[str]:
-    """Parse 'Surname, I., Surname, I. et al.' -> ['Surname, I.', ..., 'et al.']"""
+    """Parse 'Surname, I., Surname, I. & Surname, I. et al.' -> ['Surname, I.', ..., 'et al.']"""
     raw = raw.strip().rstrip(".")
     et_al = bool(re.search(r'\bet\s+al\.?', raw, re.IGNORECASE))
     raw = re.sub(r'\s*\bet\s+al\.?', '', raw, flags=re.IGNORECASE).strip().rstrip(",").strip()
+    # & işaretini virgüle çevir (Springer/Nature: "Surname, I. & Surname, I.")
+    raw = re.sub(r'\s*&\s*', ', ', raw)
 
     tokens = re.findall(
         r'[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüűÀ-ž\-]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüűÀ-ž\-]+)*'
-        r',\s*[A-ZÁÉÍÓÖŐÚÜŰ]\.(?:[A-ZÁÉÍÓÖŐÚÜŰ]\.)*',
+        r',\s*[A-ZÁÉÍÓÖŐÚÜŰ]\.?(?:[A-ZÁÉÍÓÖŐÚÜŰ]\.?)*',
         raw
     )
     if not tokens:
         tokens = [p.strip() for p in re.split(r',\s*(?=[A-ZÁÉÍÓÖŐÚÜŰ])', raw) if p.strip()]
+
+    # Her token'ın nokta ile bitmesini garantile
+    tokens = [t.rstrip(".") + "." if not t.endswith(".") else t for t in tokens]
 
     if et_al:
         tokens.append("et al.")
@@ -50,11 +55,13 @@ def _split_authors_apa(raw: str) -> list[str]:
     raw = raw.strip().rstrip(".")
     et_al = bool(re.search(r'\bet\s+al\.?', raw, re.IGNORECASE))
     raw = re.sub(r'\s*\bet\s+al\.?', '', raw, flags=re.IGNORECASE).strip().rstrip(",").strip()
-    raw = re.sub(r'\s*&\s*', ', ', raw)
+    # ",\s*&" → virgül zaten var, sadece & sil; "\s*&\s*" → ", " ekle ama çift virgülden kaçın
+    raw = re.sub(r',\s*&\s*', ', ', raw)   # "H., & M." → "H., M."
+    raw = re.sub(r'\s*&\s*', ', ', raw)    # kalan & varsa
 
     tokens = re.findall(
         r'[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű\-]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű\-]+)*'
-        r',\s*(?:[A-ZÁÉÍÓÖŐÚÜŰ]\.\s*)+',
+        r',\s*(?:[A-ZÁÉÍÓÖŐÚÜŰ]\.?\s*)+',
         raw
     )
     if not tokens:
@@ -101,6 +108,9 @@ def _detect_format(text: str) -> Optional[str]:
         if re.search(r'vol\.', text, re.IGNORECASE):
             return "MLA"
         return "Chicago"
+    # Frontiers: Surname I, ... and Surname I (year) Title. Journal vol:article_no. doi: ...
+    if re.search(r'\(\d{4}\)\s+[A-Z]', text) and re.search(r'\d+:\d+\.\s+doi:', text, re.IGNORECASE):
+        return "Frontiers"
     # ACS: vol (issue) article_no, DOI (year) — yıl en sonda parantezde, issue parantezli
     if re.search(r'\d+\s+\(\d+\)\s+\w+,', text) and re.search(r'\(\d{4}\)\s*\.?\s*$', text.strip()):
         return "ACS"
@@ -141,7 +151,7 @@ def parse_citation(text: str) -> CitationData:
     clean = re.sub(r'https?://doi\.org/\S+', '', text)
     clean = re.sub(r'\bdoi:\s*\S+', '', clean, flags=re.IGNORECASE).strip().rstrip(".")
 
-    for parser in [_try_ieee, _try_acs, _try_taylor, _try_nature, _try_apa, _try_chicago, _try_harvard, _try_vancouver, _try_mla]:
+    for parser in [_try_ieee, _try_frontiers, _try_acs, _try_taylor, _try_nature, _try_apa, _try_chicago, _try_harvard, _try_vancouver, _try_mla]:
         if parser(clean, cd):
             break
     else:
@@ -174,16 +184,22 @@ def _try_nature(text: str, cd: CitationData) -> bool:
     year = year_m.group(1)
     before_year = text[:year_m.start()].strip().rstrip(",").strip()
 
-    # Strip 'vol, issue' from end
+    # Strip 'vol, pages_or_issue' from end
     vi_m = re.search(r'\s+(\d+),\s*(\S+)\s*$', before_year)
     if vi_m:
-        volume, issue = vi_m.group(1), vi_m.group(2).rstrip(".,")
+        volume = vi_m.group(1)
+        second = vi_m.group(2).rstrip(".,")
+        # Tire veya en-dash içeriyorsa sayfa aralığı, aksi halde sayı/issue
+        if re.search(r'[\-–—]', second):
+            issue, pages = "", second
+        else:
+            issue, pages = second, ""
         body = before_year[:vi_m.start()].strip()
     else:
         vi_m2 = re.search(r'\s+(\d+)\s*$', before_year)
         if not vi_m2:
             return False
-        volume, issue = vi_m2.group(1), ""
+        volume, issue, pages = vi_m2.group(1), "", ""
         body = before_year[:vi_m2.start()].strip()
 
     # Find sentence split points: '. ' followed by an uppercase word that has
@@ -227,6 +243,7 @@ def _try_nature(text: str, cd: CitationData) -> bool:
     cd.journal = journal
     cd.volume = volume
     cd.issue = issue
+    cd.pages = pages
     cd.year = year
     return True
 
@@ -435,6 +452,68 @@ def _split_authors_ieee(raw: str) -> list[str]:
         else:
             authors.append(t)
     return authors
+
+
+def _try_frontiers(text: str, cd: CitationData) -> bool:
+    """
+    Frontiers: 'Surname I, Surname I and Surname I (year) Title. Journal vol:article_no. doi: ...'
+    Örnek: Santos AP, Srivastava I, Silbert LE, Lechman JB and Grest GS (2024) Protocol-dependent...
+           Front. Soft Matter 3:1326756. doi: 10.3389/frsfm.2023.1326756
+    Strateji: (year) ile başlığı böl, ardından sondan "vol:article. doi:" kısmını bul.
+    """
+    # Yazarlar (yıl) — yıl parantezde, başından bul
+    year_m = re.match(r'^(.+?)\s+\((\d{4})\)\s+', text)
+    if not year_m:
+        return False
+
+    author_raw = year_m.group(1).strip()
+    year = year_m.group(2)
+    after_year = text[year_m.end():]  # "Title. Journal vol:article_no. doi: ..."
+
+    # Sondan: "vol:article_no. doi: ..." veya "vol:article_no."
+    # vol:article_no — sayısal cilt, iki nokta, alfanümerik makale no
+    vi_m = re.search(r'\s+(\d+):([\w\d]+)\.?\s*(?:doi:\s*(\S+))?$', after_year, re.IGNORECASE)
+    if not vi_m:
+        return False
+
+    volume = vi_m.group(1)
+    article_no = vi_m.group(2)
+    doi_raw = (vi_m.group(3) or "").rstrip(".),")
+    body = after_year[:vi_m.start()].strip()  # "Title. Journal"
+
+    # body: "Title. Journal" — dergi noktalı kısaltma içerebilir (Front. Soft Matter)
+    # Kural: küçük harften sonra '. ' + büyük harf → cümle sınırı adayı
+    # En uzun başlığı veren bölmeyi seç (Nature parser mantığı)
+    split_points = [m.start() for m in re.finditer(r'(?<=[a-z])\.\s+(?=[A-Z])', body)]
+    if not split_points:
+        return False
+
+    best_split = max(split_points, key=lambda p: p)  # en sağdaki değil, en uzun başlığı veren
+    # En uzun başlık = en soldaki bölme noktası (tek bölme varsa o, birden fazlaysa ilki)
+    best_split = split_points[0]
+    title = body[:best_split].strip()
+    journal = body[best_split + 1:].strip()
+
+    if not title or not journal or len(title) < 10:
+        return False
+
+    # Yazar ayrıştırma: "and" → virgül, sonra büyük harfe göre böl
+    author_raw = re.sub(r'\s+and\s+', ', ', author_raw, flags=re.IGNORECASE)
+    authors = [a.strip() for a in re.split(r',\s*(?=[A-Z])', author_raw) if a.strip()]
+    if not authors:
+        return False
+
+    cd.authors = authors
+    cd.year = year
+    cd.title = title
+    cd.journal = journal
+    cd.volume = volume
+    cd.pages = article_no
+    if doi_raw:
+        cd.doi = doi_raw
+        if not cd.url:
+            cd.url = f"https://doi.org/{doi_raw}"
+    return bool(cd.authors and cd.title)
 
 
 def _try_acs(text: str, cd: CitationData) -> bool:

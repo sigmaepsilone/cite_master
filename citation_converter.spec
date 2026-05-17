@@ -20,7 +20,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='CitationConverter_v1.4-beta',
+    name='CitationConverter_v1.5-beta',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -31,6 +31,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='icon.ico',
 )
 
 coll = COLLECT(
@@ -41,5 +42,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='CitationConverter_v1.4-beta',
+    name='CitationConverter_v1.5-beta',
 )

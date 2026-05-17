@@ -169,9 +169,13 @@ def _mla_authors(authors: list[str]) -> str:
         return "et al."
     if has_et_al or len(real) > 3:
         return _ensure_dot(real[0].rstrip(".")) + " et al."
-    if len(real) == 1:
-        return _ensure_dot(real[0])
-    return real[0] + ", and " + " and ".join(real[1:]) + "."
+    normed = [_ensure_dot(a.rstrip(".")) for a in real]
+    if len(normed) == 1:
+        return normed[0]
+    if len(normed) == 2:
+        return normed[0] + ", and " + normed[1]
+    # 3 yazar: "A., B., and C."
+    return ", ".join(normed[:-1]) + ", and " + normed[-1]
 
 
 # ── IEEE ─────────────────────────────────────────────────────────────────────
@@ -199,9 +203,12 @@ def _ieee_authors(authors: list[str]) -> str:
     # IEEE: swap to "I. Surname"
     normed = []
     for a in real:
-        m = re.match(r'^([A-ZÁÉÍÓÖŐÚÜŰ][a-z\-]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-z\-]+)*),\s*(.+)$', a.rstrip("."))
+        m = re.match(r'^([A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű\-]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű\-]+)*),\s*(.+)$', a.rstrip("."))
         if m:
-            normed.append(f"{m.group(2).strip()} {m.group(1)}")
+            initials = m.group(2).strip().rstrip(".")
+            # Her initial'ın noktası olduğundan emin ol: "S. E" → "S. E."
+            initials = re.sub(r'([A-Z])\.?\s*(?=[A-Z]|$)', r'\1. ', initials).strip()
+            normed.append(f"{initials} {m.group(1)}")
         else:
             normed.append(a.rstrip("."))
     suffix = " et al." if has_et_al else ""
@@ -277,7 +284,7 @@ def _vancouver_authors(authors: list[str]) -> str:
     normed = []
     for a in real:
         a = a.rstrip(".")
-        m = re.match(r'^([A-ZÁÉÍÓÖŐÚÜŰ][a-z\-]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-z\-]+)*),\s*(.+)$', a)
+        m = re.match(r'^([A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű\-]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű\-]+)*),\s*(.+)$', a)
         if m:
             initials = re.sub(r'[\s.]', '', m.group(2))
             normed.append(f"{m.group(1)} {initials}")
