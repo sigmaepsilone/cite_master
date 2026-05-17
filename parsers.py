@@ -35,7 +35,7 @@ def _split_authors_nature(raw: str) -> list[str]:
     raw = re.sub(r'\s*&\s*', ', ', raw)
 
     tokens = re.findall(
-        r'[^\W\d_][^\W\d_\-]*(?:[\-][^\W\d_]+)*(?:\s+[^\W\d_][^\W\d_\-]*(?:[\-][^\W\d_]+)*)*'
+        r"[^\W\d_][^\W\d_\-''']*(?:[\-'''][^\W\d_]+)*(?:\s+[^\W\d_][^\W\d_\-''']*(?:[\-'''][^\W\d_]+)*)*"
         r',\s*[A-ZÁÉÍÓÖŐÚÜŰ]\.?(?:[A-ZÁÉÍÓÖŐÚÜŰ]\.?)*',
         raw
     )
@@ -60,7 +60,7 @@ def _split_authors_apa(raw: str) -> list[str]:
     raw = re.sub(r'\s*&\s*', ', ', raw)    # kalan & varsa
 
     tokens = re.findall(
-        r'[^\W\d_][^\W\d_\-]*(?:[\-][^\W\d_]+)*(?:\s+[^\W\d_][^\W\d_\-]*(?:[\-][^\W\d_]+)*)*'
+        r"[^\W\d_][^\W\d_\-''’]*(?:[\-''’][^\W\d_]+)*(?:\s+[^\W\d_][^\W\d_\-''’]*(?:[\-''’][^\W\d_]+)*)*"
         r',\s*(?:[A-ZÁÉÍÓÖŐÚÜŰ]\.?\s*)+',
         raw
     )

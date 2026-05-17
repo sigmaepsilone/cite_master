@@ -64,13 +64,29 @@ def format_apa(cd: CitationData) -> str:
     return out.strip()
 
 
+def _abbrev_initials(author: str) -> str:
+    """'Surname, Firstname Middlename' → 'Surname, F. M.' — zaten kısaltılmışsa dokunma."""
+    author = author.strip().rstrip(".")
+    m = re.match(r'^([^,]+),\s*(.+)$', author)
+    if not m:
+        return _ensure_dot(author)
+    surname = m.group(1).strip()
+    given = m.group(2).strip()
+    # Zaten kısaltılmış: "F." veya "F. M." gibi — tek harf + nokta
+    if re.match(r'^([A-Z]\.\s*)+$', given):
+        return _ensure_dot(f"{surname}, {given.strip()}")
+    # Tam isim: her kelimenin baş harfini al
+    initials = " ".join(w[0].upper() + "." for w in re.split(r'\s+', given) if w)
+    return f"{surname}, {initials}"
+
+
 def _apa_authors(authors: list[str]) -> str:
     if not authors:
         return "[yazar?]"
     real = [a for a in authors if not _is_et_al(a)]
     has_et_al = len(real) < len(authors)
 
-    normed = [_ensure_dot(a.strip()) for a in real]
+    normed = [_abbrev_initials(a) for a in real]
 
     if has_et_al:
         # APA: list all real authors then et al.
