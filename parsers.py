@@ -634,6 +634,34 @@ def _try_mla(text: str, cd: CitationData) -> bool:
 # BibTeX parser
 # ---------------------------------------------------------------------------
 
+def _bibtex_norm_author(author: str) -> str:
+    """BibTeX yazar adını 'Surname, I.' formatına normalize et.
+    'Lastname, Firstname' → 'Lastname, F.'
+    'Firstname Lastname'  → 'Lastname, F.'
+    Tire ve kesme işareti içeren adları destekler: 'Yun-Su Ha' → 'Ha, Y.'
+    """
+    author = author.strip().rstrip(".")
+    # Zaten "Lastname, Firstname" formatında
+    if "," in author:
+        parts = author.split(",", 1)
+        surname = parts[0].strip()
+        given = parts[1].strip()
+        # Kısaltılmış mı kontrol et: "F." veya "F. M."
+        if re.match(r'^([A-Z]\.\s*)+$', given):
+            return f"{surname}, {given.strip()}"
+        # Tam isim → kısalt
+        initials = " ".join(w[0].upper() + "." for w in re.split(r'[\s\-]+', given) if w and w[0].isalpha())
+        return f"{surname}, {initials}"
+    # "Firstname [Middlename] Lastname" formatı — son kelime soyadı
+    words = author.split()
+    if len(words) == 1:
+        return author
+    surname = words[-1]
+    given_words = words[:-1]
+    initials = " ".join(w[0].upper() + "." for w in given_words if w and w[0].isalpha())
+    return f"{surname}, {initials}"
+
+
 def _parse_bibtex(text: str, cd: CitationData):
     def get_field(name):
         m = re.search(
@@ -644,14 +672,19 @@ def _parse_bibtex(text: str, cd: CitationData):
 
     author_raw = get_field("author")
     if author_raw:
-        cd.authors = [a.strip() for a in re.split(r'\s+and\s+', author_raw, flags=re.IGNORECASE)]
+        raw_list = [a.strip() for a in re.split(r'\s+and\s+', author_raw, flags=re.IGNORECASE)]
+        cd.authors = [_bibtex_norm_author(a) for a in raw_list]
     cd.title = get_field("title")
     cd.journal = get_field("journal") or get_field("booktitle")
     cd.volume = get_field("volume")
     cd.issue = get_field("number")
     cd.pages = get_field("pages")
     cd.year = get_field("year")
-    cd.doi = get_field("doi")
+    raw_doi = get_field("doi")
+    # BibTeX doi alanı bazen "https://doi.org/10.xxx" şeklinde gelir, sadece 10.xxx al
+    if raw_doi:
+        m = re.search(r'(10\.\S+)', raw_doi)
+        cd.doi = m.group(1).rstrip(".,)") if m else raw_doi
     if cd.doi and not cd.url:
         cd.url = f"https://doi.org/{cd.doi}"
 
