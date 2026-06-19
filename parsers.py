@@ -752,24 +752,60 @@ def _bibtex_norm_author(author: str) -> str:
 
 def _parse_bibtex(text: str, cd: CitationData):
     def get_field(name):
-        m = re.search(
-            rf'{name}\s*=\s*[{{"](.+?)[}}"][\s,}}]',
-            text, re.IGNORECASE | re.DOTALL
-        )
-        return m.group(1).strip() if m else ""
+        # Alan adını bul, ardından = işaretinden sonra { veya " ile başlayan değeri al
+        m = re.search(rf'\b{name}\s*=\s*', text, re.IGNORECASE)
+        if not m:
+            return ""
+        pos = m.end()
+        if pos >= len(text):
+            return ""
+        ch = text[pos]
+        if ch == '{':
+            # İç içe süslü parantez sayacı ile doğru kapanışı bul
+            depth = 0
+            start = pos + 1
+            i = pos
+            while i < len(text):
+                if text[i] == '{':
+                    depth += 1
+                elif text[i] == '}':
+                    depth -= 1
+                    if depth == 0:
+                        return text[start:i].strip()
+                i += 1
+            return ""
+        elif ch == '"':
+            end = text.find('"', pos + 1)
+            return text[pos + 1:end].strip() if end != -1 else ""
+        return ""
+
+    # @INPROCEEDINGS vs @article tespiti
+    entry_type_m = re.match(r'@(\w+)\s*\{', text, re.IGNORECASE)
+    entry_type = entry_type_m.group(1).lower() if entry_type_m else "article"
+    is_proceedings = entry_type in ("inproceedings", "conference", "proceedings")
 
     author_raw = get_field("author")
     if author_raw:
         raw_list = [a.strip() for a in re.split(r'\s+and\s+', author_raw, flags=re.IGNORECASE)]
         cd.authors = [_bibtex_norm_author(a) for a in raw_list]
     cd.title = get_field("title")
-    cd.journal = get_field("journal") or get_field("booktitle")
-    cd.volume = get_field("volume")
-    cd.issue = get_field("number")
+
+    booktitle = get_field("booktitle")
+    journal = get_field("journal")
+
+    if is_proceedings and booktitle:
+        cd.conference = booktitle
+        cd.journal = booktitle  # formatters fallback için
+    else:
+        cd.journal = journal or booktitle
+
+    vol = get_field("volume")
+    cd.volume = vol if vol else ""
+    iss = get_field("number")
+    cd.issue = iss if iss else ""
     cd.pages = get_field("pages")
     cd.year = get_field("year")
     raw_doi = get_field("doi")
-    # BibTeX doi alanı bazen "https://doi.org/10.xxx" şeklinde gelir, sadece 10.xxx al
     if raw_doi:
         m = re.search(r'(10\.\S+)', raw_doi)
         cd.doi = m.group(1).rstrip(".,)") if m else raw_doi

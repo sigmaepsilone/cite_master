@@ -48,8 +48,8 @@ def format_apa(cd: CitationData) -> str:
     if cd.conference:
         conf = f"*{cd.conference}*"
         pages = f" (pp. {cd.pages})" if cd.pages else ""
-        loc = f" {cd.location}." if cd.location else "."
-        out = f"{authors} {year}. {title}. In {conf}{pages}.{loc}{doi_part}"
+        loc = f" {cd.location}" if cd.location else ""
+        out = f"{authors} {year}. {title}. In {conf}{pages}.{loc}.{doi_part}"
     else:
         journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
         vol = f"*{cd.volume}*" if cd.volume else ""
@@ -405,7 +405,7 @@ def format_vancouver(cd: CitationData) -> str:
     doi_part = f" doi:{cd.doi}" if cd.doi else ""
     if cd.conference:
         conf = f"*{cd.conference}*"
-        loc = f" {cd.location}:" if cd.location else ":"
+        loc = f" {cd.location}:" if cd.location else ""
         pages = f" p. {cd.pages}." if cd.pages else "."
         out = f"{authors} {title}. In: {conf};{loc} {year}.{pages}{doi_part}"
     else:
