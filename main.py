@@ -333,12 +333,13 @@ class MainWindow(QMainWindow):
 
         # Build status message
         detected = FORMAT_LABELS.get(cd.detected_format, cd.detected_format or "belirsiz")
+        doc_type = "Konferans Bildirisi" if cd.conference else "Dergi Makalesi"
         if cd.missing_fields:
             missing = ", ".join(cd.missing_fields)
-            msg = f"Algılanan format: {detected}  |  Uyarı — eksik alanlar: {missing}"
+            msg = f"Algılanan format: {detected}  |  Tür: {doc_type}  |  Uyarı — eksik alanlar: {missing}"
             color = "#e65100"
         else:
-            msg = f"Algılanan format: {detected}"
+            msg = f"Algılanan format: {detected}  |  Tür: {doc_type}"
             color = "#555"
         self.status_msg.setText(msg)
         self.status_msg.setStyleSheet(f"color: {color}; font-size: 11px;")

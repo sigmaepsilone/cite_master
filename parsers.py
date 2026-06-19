@@ -103,11 +103,11 @@ def _detect_format(text: str) -> Optional[str]:
         return "Harvard"
     if re.search(r'\.\s+\d{4};\s*\d+', text):
         return "Vancouver"
-    # IEEE conference: "Title," Conference Name, City, Year, pp. X
-    if re.search(r'"[^"]+,"\s+\d{4}\s+\w', text) and re.search(r'pp\.\s*\d+', text, re.IGNORECASE):
+    # IEEE conference: "Title," Conference Name, City, Year, pp. X (no vol.)
+    if re.search(r'"[^"]+[,"]', text) and re.search(r'pp\.\s*\d+', text, re.IGNORECASE) and not re.search(r'\bvol\.\s*\d+', text, re.IGNORECASE):
         return "IEEE"
     # IEEE journal: "Title," Journal, vol. X, no. Y, pp. Z, year
-    if re.search(r'"[^"]+,"\s+\S', text) and re.search(r'vol\.\s*\d+', text, re.IGNORECASE) and re.search(r'pp\.\s*\d+', text, re.IGNORECASE):
+    if re.search(r'"[^"]+"', text) and re.search(r'vol\.\s*\d+', text, re.IGNORECASE) and re.search(r'pp\.\s*\d+', text, re.IGNORECASE):
         return "IEEE"
     if re.search(r'"[^"]+"\s+[A-Z]', text):
         if re.search(r'vol\.', text, re.IGNORECASE):
@@ -144,6 +144,13 @@ def _detect_format(text: str) -> Optional[str]:
 def parse_citation(text: str) -> CitationData:
     text = re.sub(r'[\r\n]+', ' ', text).strip()
     text = re.sub(r' {2,}', ' ', text)
+    # Akıllı tırnakları ASCII'ye normalize et
+    text = text.replace('“', '"').replace('”', '"')
+    text = text.replace('‘', "'").replace('’', "'")
+    # En-dash / em-dash'ı tire normalize et (başlıkta kalabilir, sayfada sorun çıkarır)
+    # IEEE Xplore keywords bloğunu temizle
+    text = re.sub(r'\s*keywords?\s*:\s*\{[^}]*\}', '', text, flags=re.IGNORECASE).strip()
+    text = re.sub(r'\s*keywords?\s*:\s*.+$', '', text, flags=re.IGNORECASE).strip()
     cd = CitationData(raw=text)
 
     if len(text) < 20:
