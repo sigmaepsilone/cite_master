@@ -57,6 +57,7 @@ Kullanım:
 
 Desteklenen çıktı formatları:
 • APA (7th Edition)
+• ACS (American Chemical Society)
 • Chicago (Notes and Bibliography)
 • Harvard
 • MLA (9th Edition)
@@ -77,7 +78,7 @@ Sürüm: v1.5-beta
 
 Geliştirici: Sertaç Emre Kara
 
-Atıfları 8 farklı akademik formata
+Atıfları 9 farklı akademik formata
 otomatik dönüştüren masaüstü uygulaması.
 
 Lisans: MIT

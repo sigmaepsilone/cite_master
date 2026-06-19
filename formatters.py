@@ -276,6 +276,55 @@ def format_bibtex(cd: CitationData) -> str:
     return result
 
 
+# ── ACS ──────────────────────────────────────────────────────────────────────
+def format_acs(cd: CitationData) -> str:
+    """
+    ACS style (journals):
+    Surname, I. I.; Surname, I. I. Title. *Journal* **year**, *vol* (issue), pages. DOI.
+    """
+    authors = _acs_authors(cd.authors)
+    title = cd.title or "[başlık?]"
+    journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
+    year = f"**{cd.year}**" if cd.year else "**[yıl?]**"
+    vol = f", *{cd.volume}*" if cd.volume else ""
+    issue = f" ({cd.issue})" if cd.issue else ""
+    pages = f", {cd.pages}" if cd.pages else ""
+    doi_part = f" {cd.url}" if cd.url else (f" https://doi.org/{cd.doi}" if cd.doi else "")
+    out = f"{authors} {title}. {journal} {year}{vol}{issue}{pages}.{doi_part}"
+    out += _missing_note(cd.missing_fields)
+    return out.strip()
+
+
+def _acs_author_norm(author: str) -> str:
+    """Normalize to ACS 'Surname, I. I.' form."""
+    author = author.strip().rstrip(".")
+    # Already "Surname, I." form
+    if re.match(r'^[^,]+,\s*[A-Z]\.', author):
+        return _ensure_dot(author)
+    # "I. Surname" or "I.A. Surname" — swap to "Surname, I. A."
+    m = re.match(r'^((?:[A-Z]\.?\s*)+)\s+(.+)$', author)
+    if m:
+        initials = " ".join(
+            (c + ".") if not c.endswith(".") else c
+            for c in re.split(r'[\s.]+', m.group(1).strip()) if c
+        )
+        return f"{m.group(2).strip()}, {initials}"
+    return _ensure_dot(author)
+
+
+def _acs_authors(authors: list[str]) -> str:
+    if not authors:
+        return "[yazar?]"
+    real = [a.strip() for a in authors if not _is_et_al(a)]
+    has_et_al = len(real) < len(authors)
+    normed = [_acs_author_norm(a) for a in real]
+    if has_et_al:
+        return "; ".join(normed) + " et al."
+    if len(normed) == 1:
+        return normed[0]
+    return "; ".join(normed)
+
+
 # ── Vancouver ─────────────────────────────────────────────────────────────────
 def format_vancouver(cd: CitationData) -> str:
     authors = _vancouver_authors(cd.authors)
@@ -344,6 +393,7 @@ def _springer_authors(authors: list[str]) -> str:
 
 ALL_FORMATS = {
     "APA": format_apa,
+    "ACS": format_acs,
     "IEEE": format_ieee,
     "Springer/Nature": format_springer,
     "Chicago": format_chicago,
