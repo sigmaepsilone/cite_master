@@ -52,14 +52,21 @@ def format_apa(cd: CitationData) -> str:
     authors = _apa_authors(cd.authors)
     year = f"({cd.year})" if cd.year else "([yıl?])"
     title = _sentence_case(cd.title) if cd.title else "[başlık?]"
-    journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
-    vol_iss = _vol_issue(cd)
-    pages = f", {cd.pages}" if cd.pages else ""
     doi_part = f" {cd.url}" if cd.url else (f" https://doi.org/{cd.doi}" if cd.doi else "")
-    out = f"{authors} {year}. {title}. {journal}"
-    if vol_iss:
-        out += f", *{vol_iss}*"
-    out += pages + "." + doi_part
+    if cd.conference:
+        # APA conference paper format
+        conf = f"*{cd.conference}*"
+        pages = f" (pp. {cd.pages})" if cd.pages else ""
+        loc = f" {cd.location}." if cd.location else "."
+        out = f"{authors} {year}. {title}. In {conf}{pages}.{loc}{doi_part}"
+    else:
+        journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
+        vol_iss = _vol_issue(cd)
+        pages = f", {cd.pages}" if cd.pages else ""
+        out = f"{authors} {year}. {title}. {journal}"
+        if vol_iss:
+            out += f", *{vol_iss}*"
+        out += pages + "." + doi_part
     out += _missing_note(cd.missing_fields)
     return out.strip()
 
@@ -102,13 +109,19 @@ def _apa_authors(authors: list[str]) -> str:
 def format_chicago(cd: CitationData) -> str:
     authors = _chicago_authors(cd.authors)
     title = f'"{_title_case(cd.title)}"' if cd.title else '"[başlık?]"'
-    journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
-    vol = cd.volume or "[cilt?]"
-    issue_part = f", no. {cd.issue}" if cd.issue else ""
-    year = f"({cd.year})" if cd.year else "([yıl?])"
-    pages = f": {cd.pages}" if cd.pages else ""
     doi_part = f" {cd.url}" if cd.url else (f" https://doi.org/{cd.doi}" if cd.doi else "")
-    out = f"{authors} {title} {journal} {vol}{issue_part} {year}{pages}.{doi_part}"
+    year = f"({cd.year})" if cd.year else "([yıl?])"
+    if cd.conference:
+        conf = f"*{cd.conference}*"
+        pages = f": {cd.pages}" if cd.pages else ""
+        loc = f" {cd.location}" if cd.location else ""
+        out = f"{authors} {title} Paper presented at {conf},{loc} {year}{pages}.{doi_part}"
+    else:
+        journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
+        vol = cd.volume or "[cilt?]"
+        issue_part = f", no. {cd.issue}" if cd.issue else ""
+        pages = f": {cd.pages}" if cd.pages else ""
+        out = f"{authors} {title} {journal} {vol}{issue_part} {year}{pages}.{doi_part}"
     out += _missing_note(cd.missing_fields)
     return out.strip()
 
@@ -131,15 +144,21 @@ def format_harvard(cd: CitationData) -> str:
     authors = _harvard_authors(cd.authors)
     year = cd.year or "[yıl?]"
     title = _sentence_case(cd.title) if cd.title else "[başlık?]"
-    journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
-    vol_iss = _vol_issue(cd)
     avail = f" Available at: {cd.url}" if cd.url else (f" Available at: https://doi.org/{cd.doi}" if cd.doi else "")
-    out = f"{authors}, {year}. {title}. {journal}"
-    if vol_iss:
-        out += f", {vol_iss}"
-    if cd.pages:
-        out += f", pp. {cd.pages}"
-    out += "." + avail
+    if cd.conference:
+        conf = f"*{cd.conference}*"
+        pages = f", pp. {cd.pages}" if cd.pages else ""
+        loc = f", {cd.location}" if cd.location else ""
+        out = f"{authors}, {year}. {title}. In: {conf}{loc}{pages}.{avail}"
+    else:
+        journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
+        vol_iss = _vol_issue(cd)
+        out = f"{authors}, {year}. {title}. {journal}"
+        if vol_iss:
+            out += f", {vol_iss}"
+        if cd.pages:
+            out += f", pp. {cd.pages}"
+        out += "." + avail
     out += _missing_note(cd.missing_fields)
     return out.strip()
 
@@ -163,15 +182,20 @@ def _harvard_authors(authors: list[str]) -> str:
 def format_mla(cd: CitationData) -> str:
     authors = _mla_authors(cd.authors)
     title = f'"{_title_case(cd.title)}"' if cd.title else '"[başlık?]"'
-    journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
-    vol = f"vol. {cd.volume}" if cd.volume else ""
-    iss = f"no. {cd.issue}" if cd.issue else ""
-    year = cd.year or "[yıl?]"
-    pages = f"pp. {cd.pages}" if cd.pages else ""
     doi_part = f" {cd.url}" if cd.url else (f" https://doi.org/{cd.doi}" if cd.doi else "")
-    parts = [p for p in [vol, iss, year, pages] if p]
-    meta = ", ".join(parts)
-    out = f"{authors} {title} {journal}, {meta}.{doi_part}"
+    year = cd.year or "[yıl?]"
+    if cd.conference:
+        conf = f"*{cd.conference}*"
+        pages = f", pp. {cd.pages}" if cd.pages else ""
+        out = f"{authors} {title} {conf}{pages}, {year}.{doi_part}"
+    else:
+        journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
+        vol = f"vol. {cd.volume}" if cd.volume else ""
+        iss = f"no. {cd.issue}" if cd.issue else ""
+        pages = f"pp. {cd.pages}" if cd.pages else ""
+        parts = [p for p in [vol, iss, year, pages] if p]
+        meta = ", ".join(parts)
+        out = f"{authors} {title} {journal}, {meta}.{doi_part}"
     out += _missing_note(cd.missing_fields)
     return out.strip()
 
@@ -198,15 +222,24 @@ def _mla_authors(authors: list[str]) -> str:
 def format_ieee(cd: CitationData) -> str:
     authors = _ieee_authors(cd.authors)
     title = f'"{cd.title}"' if cd.title else '"[başlık?]"'
-    journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
-    vol = f"vol. {cd.volume}" if cd.volume else ""
-    iss = f"no. {cd.issue}" if cd.issue else ""
-    pp = f"p. {cd.pages}" if cd.pages else ""
     year = cd.year or "[yıl?]"
     doi_part = f" doi: {cd.doi}" if cd.doi else ""
-    parts = [p for p in [vol, iss, pp, year] if p]
-    meta = ", ".join(parts)
-    out = f"{authors} {title} {journal}, {meta}.{doi_part}"
+    if cd.conference:
+        conf = f"*{cd.conference}*"
+        loc = f", {cd.location}" if cd.location else ""
+        pp = f"pp. {cd.pages}" if cd.pages else ""
+        if pp:
+            out = f"{authors} {title} {conf}{loc}, {year}, {pp}.{doi_part}"
+        else:
+            out = f"{authors} {title} {conf}{loc}, {year}.{doi_part}"
+    else:
+        journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
+        vol = f"vol. {cd.volume}" if cd.volume else ""
+        iss = f"no. {cd.issue}" if cd.issue else ""
+        pp = f"p. {cd.pages}" if cd.pages else ""
+        parts = [p for p in [vol, iss, pp, year] if p]
+        meta = ", ".join(parts)
+        out = f"{authors} {title} {journal}, {meta}.{doi_part}"
     out += _missing_note(cd.missing_fields)
     return out.strip()
 
@@ -239,12 +272,10 @@ def format_bibtex(cd: CitationData) -> str:
     first_author = ""
     if cd.authors:
         a = cd.authors[0]
-        # "Surname, I." form
         m = re.match(r'^([A-ZÁÉÍÓÖŐÚÜŰ][A-ZÁÉÍÓÖŐÚÜŰa-záéíóöőúüű\-]+)', a)
         if m:
             first_author = m.group(1).lower()
         else:
-            # "I. Surname" or "I.I. Surname" form — grab last word
             m2 = re.search(r'([A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű\-]{2,})\s*$', a)
             first_author = m2.group(1).lower() if m2 else "unknown"
 
@@ -255,14 +286,22 @@ def format_bibtex(cd: CitationData) -> str:
     if has_et_al:
         bibtex_authors += " and others"
 
-    lines = [f"@article{{{key},"]
-    lines.append(f"  author    = {{{safe(bibtex_authors)}}},")
-    lines.append(f"  title     = {{{safe(cd.title or '')}}},")
-    lines.append(f"  journal   = {{{safe(cd.journal or '')}}},")
-    if cd.volume:
-        lines.append(f"  volume    = {{{cd.volume}}},")
-    if cd.issue:
-        lines.append(f"  number    = {{{cd.issue}}},")
+    if cd.conference:
+        lines = [f"@inproceedings{{{key},"]
+        lines.append(f"  author    = {{{safe(bibtex_authors)}}},")
+        lines.append(f"  title     = {{{safe(cd.title or '')}}},")
+        lines.append(f"  booktitle = {{{safe(cd.conference)}}},")
+        if cd.location:
+            lines.append(f"  address   = {{{safe(cd.location)}}},")
+    else:
+        lines = [f"@article{{{key},"]
+        lines.append(f"  author    = {{{safe(bibtex_authors)}}},")
+        lines.append(f"  title     = {{{safe(cd.title or '')}}},")
+        lines.append(f"  journal   = {{{safe(cd.journal or '')}}},")
+        if cd.volume:
+            lines.append(f"  volume    = {{{cd.volume}}},")
+        if cd.issue:
+            lines.append(f"  number    = {{{cd.issue}}},")
     if cd.pages:
         lines.append(f"  pages     = {{{cd.pages}}},")
     if cd.year:
@@ -279,18 +318,26 @@ def format_bibtex(cd: CitationData) -> str:
 # ── ACS ──────────────────────────────────────────────────────────────────────
 def format_acs(cd: CitationData) -> str:
     """
-    ACS style (journals):
-    Surname, I. I.; Surname, I. I. Title. *Journal* **year**, *vol* (issue), pages. DOI.
+    ACS style:
+    Journal: Surname, I. I.; ... Title. *Journal* **year**, *vol* (issue), pages. DOI.
+    Conference: Surname, I. I.; ... Title. In *Conference*; Location, year; pp pages. DOI.
     """
     authors = _acs_authors(cd.authors)
     title = cd.title or "[başlık?]"
-    journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
-    year = f"**{cd.year}**" if cd.year else "**[yıl?]**"
-    vol = f", *{cd.volume}*" if cd.volume else ""
-    issue = f" ({cd.issue})" if cd.issue else ""
-    pages = f", {cd.pages}" if cd.pages else ""
     doi_part = f" {cd.url}" if cd.url else (f" https://doi.org/{cd.doi}" if cd.doi else "")
-    out = f"{authors} {title}. {journal} {year}{vol}{issue}{pages}.{doi_part}"
+    if cd.conference:
+        conf = f"*{cd.conference}*"
+        year = cd.year or "[yıl?]"
+        loc = f"{cd.location}, " if cd.location else ""
+        pages = f"; pp {cd.pages}" if cd.pages else ""
+        out = f"{authors} {title}. In {conf}; {loc}{year}{pages}.{doi_part}"
+    else:
+        journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
+        year = f"**{cd.year}**" if cd.year else "**[yıl?]**"
+        vol = f", *{cd.volume}*" if cd.volume else ""
+        issue = f" ({cd.issue})" if cd.issue else ""
+        pages = f", {cd.pages}" if cd.pages else ""
+        out = f"{authors} {title}. {journal} {year}{vol}{issue}{pages}.{doi_part}"
     out += _missing_note(cd.missing_fields)
     return out.strip()
 
@@ -329,16 +376,21 @@ def _acs_authors(authors: list[str]) -> str:
 def format_vancouver(cd: CitationData) -> str:
     authors = _vancouver_authors(cd.authors)
     title = cd.title or "[başlık?]"
-    j = cd.journal or "[dergi?]"
-    journal = f"*{j}*"
     year = cd.year or "[yıl?]"
-    vol = cd.volume or ""
-    iss = f"({cd.issue})" if cd.issue else ""
-    pages = f":{cd.pages}" if cd.pages else ""
     doi_part = f" doi:{cd.doi}" if cd.doi else ""
-    # Dergi noktayla bitiyorsa fazladan nokta koymadan yıl ekle
-    sep = " " if j.endswith(".") else ". "
-    out = f"{authors} {title}. {journal}{sep}{year};{vol}{iss}{pages}.{doi_part}"
+    if cd.conference:
+        conf = cd.conference
+        loc = f" {cd.location}:" if cd.location else ":"
+        pages = f" p. {cd.pages}" if cd.pages else ""
+        out = f"{authors} {title}. In: {conf};{loc} {year}.{pages}{doi_part}"
+    else:
+        j = cd.journal or "[dergi?]"
+        journal = f"*{j}*"
+        vol = cd.volume or ""
+        iss = f"({cd.issue})" if cd.issue else ""
+        pages = f":{cd.pages}" if cd.pages else ""
+        sep = " " if j.endswith(".") else ". "
+        out = f"{authors} {title}. {journal}{sep}{year};{vol}{iss}{pages}.{doi_part}"
     out += _missing_note(cd.missing_fields)
     return out.strip()
 
@@ -367,16 +419,22 @@ def format_springer(cd: CitationData) -> str:
     """
     Springer/Nature style:
     Surname, I., Surname, I. et al. Title. *Journal* **vol**, issue (year).
-    https://doi.org/...
+    Conference: Surname, I. et al. Title. In: *Conference*. Location; year. pp pages.
     """
     authors = _springer_authors(cd.authors)
     title = _sentence_case(cd.title) if cd.title else "[başlık?]"
-    journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
-    vol = f"**{cd.volume}**" if cd.volume else "**[cilt?]**"
-    issue = f", {cd.issue}" if cd.issue else ""
     year = f"({cd.year})" if cd.year else "([yıl?])"
     doi_part = f" {cd.url}" if cd.url else (f" https://doi.org/{cd.doi}" if cd.doi else "")
-    out = f"{authors} {title}. {journal} {vol}{issue} {year}.{doi_part}"
+    if cd.conference:
+        conf = f"*{cd.conference}*"
+        loc = f" {cd.location};" if cd.location else ";"
+        pages = f" pp. {cd.pages}" if cd.pages else ""
+        out = f"{authors} {title}. In: {conf}.{loc} {year[1:-1]}.{pages}{doi_part}"
+    else:
+        journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
+        vol = f"**{cd.volume}**" if cd.volume else "**[cilt?]**"
+        issue = f", {cd.issue}" if cd.issue else ""
+        out = f"{authors} {title}. {journal} {vol}{issue} {year}.{doi_part}"
     out += _missing_note(cd.missing_fields)
     return out.strip()
 

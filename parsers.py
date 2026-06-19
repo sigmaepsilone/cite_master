@@ -9,7 +9,9 @@ from typing import Optional
 class CitationData:
     authors: list[str] = field(default_factory=list)
     title: str = ""
-    journal: str = ""
+    journal: str = ""        # dergi adı veya konferans adı
+    conference: str = ""     # konferans adı (ayrı alan, journal ile çakışmaz)
+    location: str = ""       # konferans yeri (şehir, ülke)
     volume: str = ""
     issue: str = ""
     pages: str = ""
@@ -60,7 +62,7 @@ def _split_authors_apa(raw: str) -> list[str]:
     raw = re.sub(r'\s*&\s*', ', ', raw)    # kalan & varsa
 
     tokens = re.findall(
-        r"[^\W\d_][^\W\d_\-''’]*(?:[\-''’][^\W\d_]+)*(?:\s+[^\W\d_][^\W\d_\-''’]*(?:[\-''’][^\W\d_]+)*)*"
+        r"[^\W\d_][^\W\d_\-''']*(?:[\-'''][^\W\d_]+)*(?:\s+[^\W\d_][^\W\d_\-''']*(?:[\-'''][^\W\d_]+)*)*"
         r',\s*(?:[A-ZÁÉÍÓÖŐÚÜŰ]\.?\s*)+',
         raw
     )
@@ -101,7 +103,10 @@ def _detect_format(text: str) -> Optional[str]:
         return "Harvard"
     if re.search(r'\.\s+\d{4};\s*\d+', text):
         return "Vancouver"
-    # IEEE: "Title," Journal, vol. X, no. Y, pp. Z, year  — vol. + pp. birlikte
+    # IEEE conference: "Title," Conference Name, City, Year, pp. X
+    if re.search(r'"[^"]+,"\s+\d{4}\s+\w', text) and re.search(r'pp\.\s*\d+', text, re.IGNORECASE):
+        return "IEEE"
+    # IEEE journal: "Title," Journal, vol. X, no. Y, pp. Z, year
     if re.search(r'"[^"]+,"\s+\S', text) and re.search(r'vol\.\s*\d+', text, re.IGNORECASE) and re.search(r'pp\.\s*\d+', text, re.IGNORECASE):
         return "IEEE"
     if re.search(r'"[^"]+"\s+[A-Z]', text):
@@ -157,7 +162,7 @@ def parse_citation(text: str) -> CitationData:
     clean = re.sub(r'https?://doi\.org/\S+', '', text)
     clean = re.sub(r'\bdoi:\s*\S+', '', clean, flags=re.IGNORECASE).strip().rstrip(".")
 
-    for parser in [_try_ieee, _try_frontiers, _try_acs, _try_taylor, _try_nature, _try_apa, _try_chicago, _try_harvard, _try_vancouver, _try_mla]:
+    for parser in [_try_ieee_conference, _try_ieee, _try_frontiers, _try_acs, _try_taylor, _try_nature, _try_apa, _try_chicago, _try_harvard, _try_vancouver, _try_mla]:
         if parser(clean, cd):
             break
     else:
@@ -437,6 +442,82 @@ def _try_ieee(text: str, cd: CitationData) -> bool:
     cd.pages = m.group(6)
     cd.year = m.group(7)
     return bool(cd.authors and cd.title)
+
+
+def _try_ieee_conference(text: str, cd: CitationData) -> bool:
+    """
+    IEEE Xplore konferans bildirisi — sağdan sola parse stratejisi:
+    'Authors, "Title," Conf Name, City[, State][, Country], Year, pp. X-Y[, doi: ...]'
+    Tanıma koşulu: başlık tırnak içinde + yıl + pp. var, vol./no. yok.
+    """
+    # Hızlı red: tırnaklı başlık yoksa veya vol. varsa journal makalesi
+    if not re.search(r'"[^"]+"', text):
+        return False
+    if re.search(r'\bvol\.\s*\d+', text, re.IGNORECASE):
+        return False
+
+    # pp. + yıl zorunlu
+    pp_m = re.search(r',\s*pp\.\s*([\d\-–—]+)', text, re.IGNORECASE)
+    if not pp_m:
+        return False
+    pages = pp_m.group(1)
+
+    # pp.'den önce yıl + konferans bloğunu bul
+    before_pp = text[:pp_m.start()].strip()
+
+    # Yıl: pp.'den hemen önce ", YYYY" kalıbı
+    year_m = re.search(r',\s*(\d{4})\s*$', before_pp)
+    if not year_m:
+        return False
+    year = year_m.group(1)
+    before_year = before_pp[:year_m.start()].strip()
+
+    # Tırnaklı başlık + öncesinde yazarlar — before_year üzerinde ara
+    # Kapanış tırnağından sonra virgül olmayabilir (doğrudan boşluk+konf gelir)
+    title_m = re.match(r'^(.+?),\s*\x22([^\x22]+)\x22\s*(.*)', before_year, re.DOTALL)
+    if not title_m:
+        # Unicode tırnak desteği (" ")
+        title_m = re.match(u'^(.+?),\\s*"([^"]+)"\\s*(.*)', before_year, re.DOTALL)
+    if not title_m:
+        return False
+    author_raw = title_m.group(1).strip()
+    title = title_m.group(2).strip().rstrip(",")
+    conf_loc = title_m.group(3).strip().lstrip(", ")
+
+    # conf_loc'u konferans adı + şehir olarak ayır:
+    # Konferans adı yıl ile başlar (2023 IEEE...) veya büyük harf kelimelerden oluşur.
+    # Şehir: parantezli kısaltmadan (IROS) sonraki veya son 1-3 virgül parçası
+    conf_parts = [p.strip() for p in re.split(r',\s*', conf_loc) if p.strip()]
+
+    # Parantezli kısaltma (örn. "(IROS)") konferans adının sonu işareti
+    conf_end_idx = len(conf_parts)
+    for i, part in enumerate(conf_parts):
+        if re.search(r'\([A-Z]{2,}\)', part):  # (IROS), (ICRA) gibi
+            conf_end_idx = i + 1
+            break
+
+    conference = ", ".join(conf_parts[:conf_end_idx])
+    location = ", ".join(conf_parts[conf_end_idx:])
+
+    # et al. yazar bloğu
+    has_et_al = bool(re.search(r'\bet\s+al\.?', author_raw, re.IGNORECASE))
+    author_raw_clean = re.sub(r'\s*\bet\s+al\.?', '', author_raw, flags=re.IGNORECASE).strip().rstrip(",")
+    authors = _split_authors_ieee(author_raw_clean)
+    if has_et_al:
+        authors.append("et al.")
+
+    if not authors or not title:
+        return False
+
+    cd.authors = authors
+    cd.title = title
+    cd.conference = conference
+    cd.journal = conference
+    cd.location = location
+    cd.year = year
+    cd.pages = pages
+    cd.detected_format = "IEEE"
+    return True
 
 
 def _split_authors_ieee(raw: str) -> list[str]:
@@ -733,6 +814,6 @@ def _validate(cd: CitationData):
         cd.missing_fields.append("journal")
     if not cd.year:
         cd.missing_fields.append("year")
-    if not cd.volume:
+    if not cd.volume and not cd.conference:
         cd.missing_fields.append("volume")
     cd.is_valid = bool((cd.title and cd.year) or cd.doi)
