@@ -111,8 +111,8 @@ def _detect_format(text: str) -> Optional[str]:
     # Frontiers: Surname I, ... and Surname I (year) Title. Journal vol:article_no. doi: ...
     if re.search(r'\(\d{4}\)\s+[A-Z]', text) and re.search(r'\d+:\d+\.\s+doi:', text, re.IGNORECASE):
         return "Frontiers"
-    # ACS: noktalı virgülle ayrılmış yazarlar + "Journal Year, Vol, Pages." kalıbı
-    if re.search(r';\s*[A-Z]', text) and re.search(r'\d{4},\s*\d+,\s*[\d–—\-]+\.?\s*$', text.strip()):
+    # ACS: noktalı virgülle ayrılmış yazarlar + "Journal Year, Vol, Pages/ArticleNo" kalıbı
+    if re.search(r';\s*[A-Z]', text) and re.search(r'\d{4},\s*\d+,\s*[\w–—\-]+', text):
         return "ACS"
     # ACS: noktalı virgülle ayrılmış yazarlar + "Journal Year, Vol (issue), pages" kalıbı
     if re.search(r';\s*[A-Z]', text) and re.search(r'\d{4},\s*\d+\s*\(\d+\)', text):
