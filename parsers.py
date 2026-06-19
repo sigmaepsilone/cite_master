@@ -116,6 +116,9 @@ def _detect_format(text: str) -> Optional[str]:
     # Frontiers: Surname I, ... and Surname I (year) Title. Journal vol:article_no. doi: ...
     if re.search(r'\(\d{4}\)\s+[A-Z]', text) and re.search(r'\d+:\d+\.\s+doi:', text, re.IGNORECASE):
         return "Frontiers"
+    # ACS konferans: "Authors. Title. In: Conf; year; pp X." kalıbı
+    if re.search(r'\bIn:\s+\S', text) and re.search(r';\s*\d{4}\s*;', text) and re.search(r'\bpp\s+[\d–—\-]+', text, re.IGNORECASE):
+        return "ACS"
     # ACS: noktalı virgülle ayrılmış yazarlar + "Journal Year, Vol, Pages/ArticleNo" kalıbı
     if re.search(r';\s*[A-Z]', text) and re.search(r'\d{4},\s*\d+,\s*[\w–—\-]+', text):
         return "ACS"
@@ -169,7 +172,7 @@ def parse_citation(text: str) -> CitationData:
     clean = re.sub(r'https?://doi\.org/\S+', '', text)
     clean = re.sub(r'\bdoi:\s*\S+', '', clean, flags=re.IGNORECASE).strip().rstrip(".")
 
-    for parser in [_try_ieee_conference, _try_ieee, _try_frontiers, _try_acs, _try_taylor, _try_nature, _try_apa, _try_chicago, _try_harvard, _try_vancouver, _try_mla]:
+    for parser in [_try_ieee_conference, _try_ieee, _try_frontiers, _try_acs_conference, _try_acs, _try_taylor, _try_nature, _try_apa, _try_chicago, _try_harvard, _try_vancouver, _try_mla]:
         if parser(clean, cd):
             break
     else:
@@ -608,6 +611,69 @@ def _try_frontiers(text: str, cd: CitationData) -> bool:
         if not cd.url:
             cd.url = f"https://doi.org/{doi_raw}"
     return bool(cd.authors and cd.title)
+
+
+def _try_acs_conference(text: str, cd: CitationData) -> bool:
+    """
+    ACS konferans çıktı formatı (programın kendi ürettiği):
+    'Authors. Title. In: Conference; [Location, ]year; pp pages. DOI'
+    Örnek: Klokowski, P.; ... evoBOT... In: 2023 IEEE/RSJ...(IROS); 2023; pp 10425-10432.
+    """
+    if not re.search(r'\bIn:\s+', text, re.IGNORECASE):
+        return False
+
+    # "In: " sonrasını bul
+    in_m = re.search(r'\bIn:\s+', text, re.IGNORECASE)
+    before_in = text[:in_m.start()].strip()
+    after_in = text[in_m.end():]
+
+    # after_in: "Conference; [location, ]year; pp pages[. doi]"
+    # noktalı virgülle parçala
+    semi_parts = [p.strip() for p in re.split(r';', after_in)]
+    if len(semi_parts) < 2:
+        return False
+
+    conference_raw = semi_parts[0].strip()
+
+    # year + optional location: "Detroit, MI, USA, 2023" veya sadece "2023"
+    year_loc_raw = semi_parts[1].strip() if len(semi_parts) > 1 else ""
+    year_m = re.search(r'\b(\d{4})\b', year_loc_raw)
+    if not year_m:
+        return False
+    year = year_m.group(1)
+    # location: yıldan önceki kısım
+    loc_raw = year_loc_raw[:year_m.start()].strip().rstrip(",").strip()
+
+    # pages: "pp X-Y" veya "pp X–Y"
+    pages_raw = semi_parts[2].strip() if len(semi_parts) > 2 else ""
+    pages_m = re.search(r'\bpp\s+([\d–—\-]+)', pages_raw, re.IGNORECASE)
+    pages = pages_m.group(1) if pages_m else ""
+
+    # before_in: "Authors. Title."
+    # Nokta ile cümlelere böl — son noktalı kısım başlık, öncesi yazarlar
+    dot_parts = re.split(r'\.\s+', before_in.rstrip("."))
+    if len(dot_parts) < 2:
+        return False
+    title = dot_parts[-1].strip()
+    author_block = ". ".join(dot_parts[:-1]).strip()
+
+    if not author_block or not title or not conference_raw:
+        return False
+
+    # Noktalı virgülle ayrılmış yazarlar
+    authors = [a.strip() for a in re.split(r';\s*', author_block) if a.strip()]
+    if not authors:
+        return False
+
+    cd.authors = authors
+    cd.title = title
+    cd.conference = conference_raw
+    cd.journal = conference_raw
+    cd.location = loc_raw
+    cd.year = year
+    cd.pages = pages
+    cd.detected_format = "ACS"
+    return True
 
 
 def _try_acs(text: str, cd: CitationData) -> bool:

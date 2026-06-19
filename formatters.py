@@ -48,8 +48,8 @@ def format_apa(cd: CitationData) -> str:
     if cd.conference:
         conf = f"*{cd.conference}*"
         pages = f" (pp. {cd.pages})" if cd.pages else ""
-        loc = f" {cd.location}" if cd.location else ""
-        out = f"{authors} {year}. {title}. In {conf}{pages}.{loc}.{doi_part}"
+        loc = f" {cd.location}." if cd.location else ""
+        out = f"{authors} {year}. {title}. In {conf}{pages}.{loc}{doi_part}"
     else:
         journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
         vol = f"*{cd.volume}*" if cd.volume else ""
