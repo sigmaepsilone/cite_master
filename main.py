@@ -76,7 +76,7 @@ Tanınan giriş formatları:
 
 ABOUT_TEXT = """Citation Converter — Atıf Dönüştürücü
 
-Sürüm: v1.7-beta
+Sürüm: v1.8-beta
 
 Geliştirici: Sertaç Emre Kara
 
