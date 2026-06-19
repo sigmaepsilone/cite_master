@@ -52,13 +52,13 @@ def format_apa(cd: CitationData) -> str:
     authors = _apa_authors(cd.authors)
     year = f"({cd.year})" if cd.year else "([yıl?])"
     title = _sentence_case(cd.title) if cd.title else "[başlık?]"
-    journal = cd.journal or "[dergi?]"
+    journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
     vol_iss = _vol_issue(cd)
     pages = f", {cd.pages}" if cd.pages else ""
     doi_part = f" {cd.url}" if cd.url else (f" https://doi.org/{cd.doi}" if cd.doi else "")
     out = f"{authors} {year}. {title}. {journal}"
     if vol_iss:
-        out += f", {vol_iss}"
+        out += f", *{vol_iss}*"
     out += pages + "." + doi_part
     out += _missing_note(cd.missing_fields)
     return out.strip()
@@ -102,7 +102,7 @@ def _apa_authors(authors: list[str]) -> str:
 def format_chicago(cd: CitationData) -> str:
     authors = _chicago_authors(cd.authors)
     title = f'"{_title_case(cd.title)}"' if cd.title else '"[başlık?]"'
-    journal = cd.journal or "[dergi?]"
+    journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
     vol = cd.volume or "[cilt?]"
     issue_part = f", no. {cd.issue}" if cd.issue else ""
     year = f"({cd.year})" if cd.year else "([yıl?])"
@@ -131,7 +131,7 @@ def format_harvard(cd: CitationData) -> str:
     authors = _harvard_authors(cd.authors)
     year = cd.year or "[yıl?]"
     title = _sentence_case(cd.title) if cd.title else "[başlık?]"
-    journal = cd.journal or "[dergi?]"
+    journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
     vol_iss = _vol_issue(cd)
     avail = f" Available at: {cd.url}" if cd.url else (f" Available at: https://doi.org/{cd.doi}" if cd.doi else "")
     out = f"{authors}, {year}. {title}. {journal}"
@@ -329,14 +329,16 @@ def _acs_authors(authors: list[str]) -> str:
 def format_vancouver(cd: CitationData) -> str:
     authors = _vancouver_authors(cd.authors)
     title = cd.title or "[başlık?]"
-    journal = cd.journal or "[dergi?]"
+    j = cd.journal or "[dergi?]"
+    journal = f"*{j}*"
     year = cd.year or "[yıl?]"
     vol = cd.volume or ""
     iss = f"({cd.issue})" if cd.issue else ""
     pages = f":{cd.pages}" if cd.pages else ""
     doi_part = f" doi:{cd.doi}" if cd.doi else ""
-    journal_str = journal.rstrip(".")
-    out = f"{authors} {title}. {journal_str}. {year};{vol}{iss}{pages}.{doi_part}"
+    # Dergi noktayla bitiyorsa fazladan nokta koymadan yıl ekle
+    sep = " " if j.endswith(".") else ". "
+    out = f"{authors} {title}. {journal}{sep}{year};{vol}{iss}{pages}.{doi_part}"
     out += _missing_note(cd.missing_fields)
     return out.strip()
 
@@ -364,13 +366,13 @@ def _vancouver_authors(authors: list[str]) -> str:
 def format_springer(cd: CitationData) -> str:
     """
     Springer/Nature style:
-    Surname, I., Surname, I. et al. Title. Journal vol, issue (year).
+    Surname, I., Surname, I. et al. Title. *Journal* **vol**, issue (year).
     https://doi.org/...
     """
     authors = _springer_authors(cd.authors)
     title = _sentence_case(cd.title) if cd.title else "[başlık?]"
-    journal = cd.journal or "[dergi?]"
-    vol = cd.volume or "[cilt?]"
+    journal = f"*{cd.journal}*" if cd.journal else "*[dergi?]*"
+    vol = f"**{cd.volume}**" if cd.volume else "**[cilt?]**"
     issue = f", {cd.issue}" if cd.issue else ""
     year = f"({cd.year})" if cd.year else "([yıl?])"
     doi_part = f" {cd.url}" if cd.url else (f" https://doi.org/{cd.doi}" if cd.doi else "")

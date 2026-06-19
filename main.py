@@ -1,6 +1,8 @@
 """Citation Converter - main PyQt6 application."""
 
 import sys
+import re
+import html
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QTextEdit, QPushButton, QScrollArea,
@@ -101,6 +103,14 @@ FORMAT_LABELS = {
 }
 
 
+def _md_to_html(text: str) -> str:
+    """Convert minimal markdown (**bold**, *italic*) to HTML for QLabel."""
+    t = html.escape(text)
+    t = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', t)
+    t = re.sub(r'\*(.+?)\*', r'<i>\1</i>', t)
+    return t
+
+
 class FormatBlock(QFrame):
     def __init__(self, fmt_name: str, text: str, parent=None):
         super().__init__(parent)
@@ -127,9 +137,10 @@ class FormatBlock(QFrame):
 
         layout.addLayout(header)
 
-        self.body_lbl = QLabel(text)
+        self.body_lbl = QLabel(_md_to_html(text))
         self.body_lbl.setObjectName("formatBody")
         self.body_lbl.setWordWrap(True)
+        self.body_lbl.setTextFormat(Qt.TextFormat.RichText)
         self.body_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self.body_lbl)
 

@@ -111,7 +111,13 @@ def _detect_format(text: str) -> Optional[str]:
     # Frontiers: Surname I, ... and Surname I (year) Title. Journal vol:article_no. doi: ...
     if re.search(r'\(\d{4}\)\s+[A-Z]', text) and re.search(r'\d+:\d+\.\s+doi:', text, re.IGNORECASE):
         return "Frontiers"
-    # ACS: vol (issue) article_no, DOI (year) — yıl en sonda parantezde, issue parantezli
+    # ACS: noktalı virgülle ayrılmış yazarlar + "Journal Year, Vol, Pages." kalıbı
+    if re.search(r';\s*[A-Z]', text) and re.search(r'\d{4},\s*\d+,\s*[\d–—\-]+\.?\s*$', text.strip()):
+        return "ACS"
+    # ACS: noktalı virgülle ayrılmış yazarlar + "Journal Year, Vol (issue), pages" kalıbı
+    if re.search(r';\s*[A-Z]', text) and re.search(r'\d{4},\s*\d+\s*\(\d+\)', text):
+        return "ACS"
+    # ACS: vol (issue) article_no, (year) — yıl en sonda parantezde, issue parantezli
     if re.search(r'\d+\s+\(\d+\)\s+\w+,', text) and re.search(r'\(\d{4}\)\s*\.?\s*$', text.strip()):
         return "ACS"
     # Taylor & Francis: Authors (year) Title, Journal, vol:issue, pages
@@ -518,12 +524,37 @@ def _try_frontiers(text: str, cd: CitationData) -> bool:
 
 def _try_acs(text: str, cd: CitationData) -> bool:
     """
-    ACS: 'Authors, Title, Journal vol (issue) article_no, (year).'
-    Örnek: S. Poincloux, & K.A. Takeuchi, Rigidity transition..., Proc. Natl. Acad. Sci. U.S.A. 121 (49) e2408706121, (2024).
-    Strateji: önce yıl ve vol/issue/article_no kısmını sağdan bul, geri kalan body'de
-    yazarlar ve başlığı küçük harf sınırından böl, journal = body'nin son kısmı.
+    ACS iki alt format destekler:
+    1. 'Authors. Title. Journal Year, Vol, Pages.'  (noktalı, yıl düz)
+       Örnek: Van Niekerk, T.I.; Hua, T.; Hattingh, D.G. A Neuro-Fuzzy... IFAC Proc. Vol. 2006, 39, 113-118.
+    2. 'Authors, Title, Journal vol (issue) article_no, (year).'  (virgüllü, yıl parantezde)
+       Örnek: S. Poincloux, & K.A. Takeuchi, Rigidity transition..., Proc. Natl. Acad. Sci. U.S.A. 121 (49) e2408706121, (2024).
     """
-    # Yıl en sonda: (2024) veya (2024).
+    # Alt format 1: noktalı virgülle ayrılmış yazarlar, yıl düz sayı olarak
+    # Tanıma: noktalı virgül içeriyor VE sonda "Year, Vol, Pages." kalıbı var
+    if ";" in text:
+        m = re.match(
+            r'^(.+?)\.\s+'           # yazarlar (noktalı virgülle ayrılmış)
+            r'(.+?)\.\s+'            # başlık
+            r'(.+?)\s+'              # dergi
+            r'(\d{4}),\s*'           # yıl,
+            r'(\d+),\s*'             # cilt,
+            r'([\d–—\-]+)\.?',       # sayfalar
+            text
+        )
+        if m:
+            raw_authors = m.group(1)
+            authors = [a.strip() for a in re.split(r';\s*', raw_authors) if a.strip()]
+            if authors:
+                cd.authors = authors
+                cd.title = m.group(2).strip()
+                cd.journal = re.sub(r'\s*[Vv]ol\.?\s*$', '', m.group(3).strip()).strip()
+                cd.year = m.group(4)
+                cd.volume = m.group(5)
+                cd.pages = m.group(6)
+                return True
+
+    # Alt format 2: yıl en sonda parantezde: (2024) veya (2024).
     year_m = re.search(r'\((\d{4})\)\s*\.?\s*$', text.strip())
     if not year_m:
         return False
