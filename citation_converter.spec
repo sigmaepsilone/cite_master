@@ -42,5 +42,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name='CitationConverter_v1.5-beta',
+    name='CitationConverter_v1.6-beta',
 )
