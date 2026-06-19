@@ -111,6 +111,72 @@ def _md_to_html(text: str) -> str:
     return t
 
 
+def _md_to_rtf(text: str) -> bytes:
+    """Convert minimal markdown (**bold**, *italic*) to RTF bytes for clipboard."""
+    # RTF özel karakterleri kaçır
+    def rtf_escape(s: str) -> str:
+        out = []
+        for ch in s:
+            if ch == '\\':
+                out.append('\\\\')
+            elif ch == '{':
+                out.append('\\{')
+            elif ch == '}':
+                out.append('\\}')
+            elif ord(ch) > 127:
+                out.append(f'\\u{ord(ch)}?')
+            else:
+                out.append(ch)
+        return ''.join(out)
+
+    # Önce **bold** sonra *italic* dönüştür
+    parts = []
+    i = 0
+    while i < len(text):
+        if text[i:i+2] == '**':
+            end = text.find('**', i + 2)
+            if end != -1:
+                parts.append(f'\\b {rtf_escape(text[i+2:end])}\\b0 ')
+                i = end + 2
+                continue
+        if text[i] == '*':
+            end = text.find('*', i + 1)
+            if end != -1:
+                parts.append(f'\\i {rtf_escape(text[i+1:end])}\\i0 ')
+                i = end + 1
+                continue
+        parts.append(rtf_escape(text[i]))
+        i += 1
+
+    content = ''.join(parts)
+    rtf = (
+        r'{\rtf1\ansi\deff0'
+        r'{\fonttbl{\f0\froman\fcharset0 Times New Roman;}}'
+        r'{\colortbl;}'
+        r'\f0\fs24 ' + content + r'}'
+    )
+    return rtf.encode('ascii', errors='replace')
+
+
+def _copy_rtf(text: str) -> None:
+    """Copy text with RTF formatting to clipboard using win32clipboard."""
+    try:
+        import win32clipboard
+        rtf_data = _md_to_rtf(text)
+        plain = re.sub(r'\*+', '', text)  # markdown sembollerini sil
+        win32clipboard.OpenClipboard()
+        win32clipboard.EmptyClipboard()
+        # RTF formatı
+        rtf_format = win32clipboard.RegisterClipboardFormat("Rich Text Format")
+        win32clipboard.SetClipboardData(rtf_format, rtf_data)
+        # Düz metin de ekle (fallback)
+        win32clipboard.SetClipboardData(win32clipboard.CF_UNICODETEXT, plain)
+        win32clipboard.CloseClipboard()
+    except Exception:
+        # win32clipboard yoksa veya hata olursa düz metin kopyala
+        QApplication.clipboard().setText(re.sub(r'\*+', '', text))
+
+
 class FormatBlock(QFrame):
     def __init__(self, fmt_name: str, text: str, parent=None):
         super().__init__(parent)
@@ -150,7 +216,7 @@ class FormatBlock(QFrame):
         layout.addWidget(sep)
 
     def _copy(self):
-        QApplication.clipboard().setText(self.citation_text)
+        _copy_rtf(self.citation_text)
         orig = self.copy_btn.text()
         self.copy_btn.setText("Kopyalandı!")
         QTimer.singleShot(1500, lambda: self.copy_btn.setText(orig))
