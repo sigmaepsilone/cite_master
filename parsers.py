@@ -372,6 +372,43 @@ def _try_harvard(text: str, cd: CitationData) -> bool:
     return bool(cd.authors and cd.title)
 
 
+def _split_authors_vancouver(raw: str) -> list[str]:
+    """
+    Vancouver yazar formatı: 'Soyad AB, Soyad C, Soyad DE'
+    Yani Soyad + boşluksuz büyük harf initials, yazarlar virgülle ayrılır.
+    Çıktı: ['Soyad, A. B.', ...] — diğer formatlarla tutarlı.
+    """
+    raw = raw.strip().rstrip(".")
+    et_al = bool(re.search(r'\bet\s+al\.?', raw, re.IGNORECASE))
+    raw = re.sub(r'\s*\bet\s+al\.?', '', raw, flags=re.IGNORECASE).strip().rstrip(",")
+
+    # "Soyad AB" token: büyük+küçük harf soyadı (Unicode), ardından boşluk, ardından 1-4 büyük harf
+    # [^\W\d_] = herhangi bir Unicode harf karakteri (ğ, ş, ç, ı dahil)
+    tokens = re.findall(
+        r'[^\W\d_][^\W\d_\-]*(?:\s+[^\W\d_][^\W\d_\-]*)*\s+[A-ZÁÉÍÓÖŐÚÜŰĞŞÇIÎ]{1,4}(?=\s*,|$)',
+        raw
+    )
+
+    authors = []
+    for t in tokens:
+        # "Soyad AB" → "Soyad, A. B."
+        parts = t.rsplit(None, 1)  # son kelime initials
+        if len(parts) == 2:
+            surname, inits = parts
+            dotted = " ".join(c + "." for c in inits)
+            authors.append(f"{surname}, {dotted}")
+        else:
+            authors.append(t)
+
+    if not authors:
+        # Fallback: virgülle böl
+        authors = [p.strip() for p in raw.split(",") if p.strip()]
+
+    if et_al:
+        authors.append("et al.")
+    return authors
+
+
 def _try_vancouver(text: str, cd: CitationData) -> bool:
     """Vancouver: 'Authors. Title. Journal. year;vol(issue):pages.'"""
     m = re.match(
@@ -385,7 +422,7 @@ def _try_vancouver(text: str, cd: CitationData) -> bool:
     )
     if not m:
         return False
-    cd.authors = _split_authors_nature(m.group(1))
+    cd.authors = _split_authors_vancouver(m.group(1))
     cd.title = m.group(2).strip()
     cd.journal = m.group(3).strip()
     cd.year = m.group(4)

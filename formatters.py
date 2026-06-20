@@ -178,10 +178,10 @@ def _ieee_authors(authors: list[str]) -> str:
     has_et_al = len(real) < len(authors)
     normed = []
     for a in real:
-        m = re.match(r'^([A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű\-]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű\-]+)*),\s*(.+)$', a.rstrip("."))
+        m = re.match(r'^([^\W\d_][^\W\d_\-]*(?:\s+[^\W\d_][^\W\d_\-]*)*),\s*(.+)$', a.rstrip("."))
         if m:
             initials = m.group(2).strip().rstrip(".")
-            initials = re.sub(r'([A-Z])\.?\s*(?=[A-Z]|$)', r'\1. ', initials).strip()
+            initials = re.sub(r'([A-ZÁÉÍÓÖŐÚÜŰĞŞÇIÎ])\.?\s*(?=[A-ZÁÉÍÓÖŐÚÜŰĞŞÇIÎ]|$)', r'\1. ', initials).strip()
             normed.append(f"{initials} {m.group(1)}")
         else:
             normed.append(a.rstrip("."))
@@ -428,7 +428,8 @@ def _vancouver_authors(authors: list[str]) -> str:
     normed = []
     for a in real:
         a = a.rstrip(".")
-        m = re.match(r'^([A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű\-]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű\-]+)*),\s*(.+)$', a)
+        # "Surname, I. I." → "Surname II" (noktasız initials, boşluksuz)
+        m = re.match(r'^([^\W\d_][^\W\d_\-]*(?:\s+[^\W\d_][^\W\d_\-]*)*),\s*(.+)$', a)
         if m:
             initials = re.sub(r'[\s.]', '', m.group(2))
             normed.append(f"{m.group(1)} {initials}")
